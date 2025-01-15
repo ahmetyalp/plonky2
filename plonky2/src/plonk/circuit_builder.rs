@@ -1271,6 +1271,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
 
         if let Some(goal_data) = self.goal_common_data {
             if goal_data != common {
+                println!("goal data {:?}", goal_data);
+                println!("common {:?}", common);
                 warn!("The expected circuit data passed to cyclic recursion method did not match the actual circuit");
                 success = false;
             }
