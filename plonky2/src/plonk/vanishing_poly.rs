@@ -1,5 +1,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::{format, vec, vec::Vec};
+use log::debug;
 use core::cmp::min;
 
 use plonky2_field::polynomial::PolynomialCoeffs;
@@ -705,6 +706,7 @@ pub fn evaluate_gate_constraints_base_batch<F: RichField + Extendable<D>, const 
 ) -> Vec<F> {
     let mut constraints_batch = vec![F::ZERO; common_data.num_gate_constraints * vars_batch.len()];
     for (i, gate) in common_data.gates.iter().enumerate() {
+        let now = std::time::Instant::now();
         let selector_index = common_data.selectors_info.selector_indices[i];
         let gate_constraints_batch = gate.0.eval_filtered_base_batch(
             vars_batch,
@@ -723,6 +725,16 @@ pub fn evaluate_gate_constraints_base_batch<F: RichField + Extendable<D>, const 
             &mut constraints_batch[..gate_constraints_batch.len()],
             &gate_constraints_batch,
         );
+        if gate.0.id().contains("BaseSumGate") || gate.0.id().contains("ByteDecompositionGate") {
+            let elapsed = now.elapsed();
+            debug!(
+                "{} / {} evaluate_gate_constraints_base_batch took {} nanoseconds",
+                gate.0.id(),
+                gate.0.num_constraints(),
+                elapsed.as_nanos()
+            );
+
+        }
     }
     constraints_batch
 }

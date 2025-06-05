@@ -151,7 +151,7 @@ pub struct CircuitBuilder<F: RichField + Extendable<D>, const D: usize> {
     gates: HashSet<GateRef<F, D>>,
 
     /// The concrete placement of each gate.
-    pub(crate) gate_instances: Vec<GateInstance<F, D>>,
+    pub gate_instances: Vec<GateInstance<F, D>>,
 
     /// Targets to be made public.
     public_inputs: Vec<Target>,
@@ -1027,7 +1027,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         )
     }
 
-    pub fn print_gate_counts(&self, min_delta: usize) {
+    pub fn print_gate_counts(&mut self, min_delta: usize) {
         // Print gate counts for each context.
         self.context_log
             .filter(self.num_gates(), min_delta)
@@ -1043,6 +1043,50 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 .count();
             debug!("- {} instances of {}", count, gate.0.id());
         }
+
+        let ignore_list = ["Poseidon2Gate", "ArithmeticGate", "U16SubtractionGate", "U32SubtractionGate", "U16AddManyGate", "ComparisonGate"];
+        self.gate_instances.iter().for_each(|gate| {
+            if ignore_list.iter().any(|&e| gate.gate_ref.0.id().contains(e)) {
+                return;
+            }
+
+            debug!(
+                "Gate {}. Wires: {}. Degree: {}. Ops: {}",
+                gate.gate_ref.0.id(),
+                gate.gate_ref.0.num_wires(),
+                gate.gate_ref.0.degree(),
+                gate.gate_ref.0.num_ops()
+            );
+        });
+
+        // Print Open Slots
+        debug!("Open slots:");
+        let mut seen = HashSet::new();
+        self.gate_instances.iter_mut().for_each(|gate| {
+            let current_slot = self.current_slots.entry(gate.gate_ref.clone()).or_default();
+            current_slot.current_slot.iter().for_each(|(params, (gate_idx, slot_idx))| {
+                // if *slot_idx < gate.gate_ref.0.num_ops() {
+                //     return;
+                // }
+                if seen.contains(gate_idx) {
+                    return;
+                }
+                seen.insert(*gate_idx);
+
+                debug!(
+                    "Gate {}/{}: Slot {}/{}: Params: {:?}",
+                    gate.gate_ref.0.id(),
+                    gate_idx,
+                    slot_idx,
+                    gate.gate_ref.0.num_ops(),
+                    params
+                );
+            });
+        });
+
+        debug!("Gate 5072 is {}", self.gate_instances[5072].gate_ref.0.id());
+
+
     }
 
     /// In PLONK's permutation argument, there's a slight chance of division by zero. We can
