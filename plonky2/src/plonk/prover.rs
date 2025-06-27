@@ -255,6 +255,8 @@ where
         zs_partial_products
     };
 
+    println!("length of zs_partial_products_lookups: {}, {}", zs_partial_products_lookups.len(), zs_partial_products_lookups[0].len());
+
     let partial_products_zs_and_lookup_commitment = timed!(
         timing,
         "commit to partial products, Z's and, if any, lookup polynomials",
