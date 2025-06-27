@@ -11,6 +11,9 @@ use crate::hash::merkle_proofs::MerkleProof;
 use crate::plonk::config::{GenericHashOut, Hasher};
 use crate::util::log2_strict;
 
+#[cfg(feature = "cuda")]
+use std::sync::Arc;
+
 /// The Merkle cap of height `h` of a Merkle tree is the `h`-th layer (from the root) of the tree.
 /// It can be used in place of the root to verify Merkle paths, which are `h` elements shorter.
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -63,7 +66,7 @@ pub struct MerkleTree<F: RichField, H: Hasher<F>> {
     #[cfg(feature = "cuda")]
     pub leaf_len: usize,
     #[cfg(feature = "cuda")]
-    pub leaves: Arc<Vec<F>>,
+    pub flatten_leaves: Arc<Vec<F>>,
     #[cfg(feature = "cuda")]
     pub leaves_len: usize,
     #[cfg(feature = "cuda")]
@@ -81,7 +84,7 @@ impl<F: RichField, H: Hasher<F>> Default for MerkleTree<F, H> {
             #[cfg(feature = "cuda")]
             leaf_len: 0,
             #[cfg(feature = "cuda")]
-            leaves: Arc::new(Vec::new()),
+            flatten_leaves: Arc::new(Vec::new()),
             #[cfg(feature = "cuda")]
             leaves_len: 0,
             #[cfg(feature = "cuda")]
@@ -244,7 +247,7 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
             #[cfg(feature = "cuda")]
             leaf_len: 0,
             #[cfg(feature = "cuda")]
-            leaves: Arc::new(Vec::new()),
+            flatten_leaves: Arc::new(Vec::new()),
             #[cfg(feature = "cuda")]
             leaves_len: 0,
             #[cfg(feature = "cuda")]
@@ -259,10 +262,10 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
         return &self.leaves[i];
 
         #[cfg(feature = "cuda")]
-        if self.my_leaves.is_empty() {
+        if self.flatten_leaves.is_empty() {
             &self.leaves[i]
         } else {
-            &self.my_leaves[i * self.my_leaf_len.. (i+1) * self.my_leaf_len]
+            &self.flatten_leaves[i * self.leaf_len.. (i+1) * self.leaf_len]
         }
     }
 
@@ -286,7 +289,7 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
             } else {
                 &self.digests_and_cap
             };
-            merkle_tree_prove::<F, H>(leaf_index, self.leaves.len(), cap_height, &self.digests);
+            merkle_tree_prove::<F, H>(leaf_index, self.leaves.len(), cap_height, &self.digests)
         };
 
         MerkleProof { siblings }

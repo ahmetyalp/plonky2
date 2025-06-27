@@ -1176,6 +1176,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         );
 
         // Precompute FFT roots.
+        let fft_root_table_deg = fft_root_table(1 << degree_bits).concat();
         let max_fft_points = 1 << (degree_bits + max(rate_bits, log2_ceil(quotient_degree_factor)));
         let fft_root_table = fft_root_table(max_fft_points);
 
@@ -1297,6 +1298,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             public_inputs: self.public_inputs,
             representative_map: forest.parents,
             fft_root_table: Some(fft_root_table),
+            fft_root_table_deg,
             circuit_digest,
             lookup_rows: self.lookup_rows.clone(),
             lut_to_lookups: self.lut_to_lookups.clone(),

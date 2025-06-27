@@ -335,6 +335,7 @@ pub trait Read {
             leaves,
             digests,
             cap,
+            ..MerkleTree::default() // TODO: @ahmetyalp What about serialization of cuda values?. Same as ProverOnlyCircuitData!
         })
     }
 
@@ -900,6 +901,7 @@ pub trait Read {
             public_inputs,
             representative_map,
             fft_root_table,
+            fft_root_table_deg: vec![],
             circuit_digest,
             lookup_rows,
             lut_to_lookups,
@@ -1850,6 +1852,7 @@ pub trait Write {
             public_inputs,
             representative_map,
             fft_root_table,
+            fft_root_table_deg: _,
             circuit_digest,
             lookup_rows,
             lut_to_lookups,

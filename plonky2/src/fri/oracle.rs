@@ -6,6 +6,24 @@ use std::alloc;
 use std::alloc::{AllocError, Allocator, Layout};
 #[cfg(feature = "cuda")]
 use std::ffi::c_void;
+#[cfg(feature = "cuda")]
+use plonky2_cuda;
+#[cfg(feature = "cuda")]
+use rustacuda::prelude::*;
+#[cfg(feature = "cuda")]
+use rustacuda::memory::{AsyncCopyDestination, DeviceBuffer, DeviceSlice, cuda_malloc_locked, cuda_free_locked};
+#[cfg(feature = "cuda")]
+use std::mem::transmute;
+#[cfg(feature = "cuda")]
+use std::mem;
+#[cfg(feature = "cuda")]
+use std::sync::Arc;
+#[cfg(feature = "cuda")]
+use std::ptr::NonNull;
+#[cfg(feature = "cuda")]
+use crate::plonk::config::Hasher;
+#[cfg(feature = "cuda")]
+use crate::hash::merkle_tree::MerkleCap;
 
 use itertools::Itertools;
 use plonky2_field::types::Field;
@@ -29,6 +47,7 @@ use crate::util::timing::TimingTree;
 use crate::util::{log2_strict, reverse_bits, reverse_index_bits_in_place, transpose};
 
 #[cfg(feature = "cuda")]
+#[derive(Debug)]
 pub struct CUDAAllocator {}
 
 #[cfg(feature = "cuda")]
@@ -51,6 +70,59 @@ unsafe impl Allocator for CUDAAllocator {
             }
         }
     }
+}
+
+#[cfg(feature = "cuda")]
+#[derive(Debug)]
+pub struct CudaInnerContext {
+    pub stream: rustacuda::stream::Stream,
+    pub stream2: rustacuda::stream::Stream,
+
+}
+
+#[cfg(feature = "cuda")]
+#[repr(C)]
+#[derive(Debug)]
+pub struct CudaInvContext<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
+{
+    pub inner: CudaInnerContext,
+    pub ext_values_flatten :Arc<Vec<F>>,
+    pub values_flatten     :Arc<Vec<F, CUDAAllocator>>,
+    pub digests_and_caps_buf :Arc<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>,
+
+    pub ext_values_flatten2 :Arc<Vec<F>>,
+    pub values_flatten2     :Arc<Vec<F, CUDAAllocator>>,
+    pub digests_and_caps_buf2 :Arc<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>,
+
+    pub ext_values_flatten3 :Arc<Vec<F>>,
+    pub values_flatten3     :Arc<Vec<F, CUDAAllocator>>,
+    pub digests_and_caps_buf3 :Arc<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>,
+
+    // pub values_device: DeviceBuffer::<F>,
+    // pub ext_values_device: DeviceBuffer::<F>,
+    pub cache_mem_device: DeviceBuffer::<F>,
+    pub second_stage_offset: usize,
+
+    pub root_table_device: DeviceBuffer::<F>,
+    pub root_table_device2: DeviceBuffer::<F>,
+    pub constants_sigmas_commitment_leaves_device: DeviceBuffer::<F>,
+    pub shift_powers_device: DeviceBuffer::<F>,
+    pub shift_inv_powers_device: DeviceBuffer::<F>,
+
+    pub points_device: DeviceBuffer::<F>,
+    pub z_h_on_coset_evals_device: DeviceBuffer::<F>,
+    pub z_h_on_coset_inverses_device: DeviceBuffer::<F>,
+    pub k_is_device: DeviceBuffer::<F>,
+
+    pub ctx: Context,
+}
+
+#[cfg(not(feature = "cuda"))]
+#[repr(C)]
+#[derive(Debug)]
+pub struct CudaInvContext<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
+    pub _p : std::marker::PhantomData<F>,
+    pub _c : std::marker::PhantomData<C>,
 }
 
 #[cfg(not(feature = "cuda"))]
@@ -438,7 +510,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
                     ctx_digests_and_caps_buf[num_digests..num_digests_and_caps].to_vec(),
                 ),
                 leaf_len: num_polynomials + salt_size,
-                leaves: ctx_ext_values_flatten,
+                flatten_leaves: ctx_ext_values_flatten,
                 leaves_len: ctx_ext_values_flatten_len,
                 device_offset: ext_values_device_offset as isize,
                 digests_and_cap: ctx_digests_and_caps_buf,
@@ -578,7 +650,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
                     ctx_digests_and_caps_buf[num_digests..num_digests_and_caps].to_vec(),
                 ),
                 leaf_len: num_polynomials + salt_size,
-                leaves: ctx_ext_values_flatten,
+                flatten_leaves: ctx_ext_values_flatten,
                 leaves_len: ctx_ext_values_flatten_len,
                 device_offset: ext_values_device_offset as isize,
                 digests_and_cap: ctx_digests_and_caps_buf,

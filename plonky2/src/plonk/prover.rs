@@ -49,6 +49,10 @@ use rustacuda::memory::DeviceSlice;
 use rustacuda::prelude::CopyDestination;
 #[cfg(feature = "cuda")]
 use rustacuda::memory::AsyncCopyDestination;
+#[cfg(feature = "cuda")]
+use plonky2_util::log2_strict;
+#[cfg(feature = "cuda")]
+use std::mem::transmute;
 
 /// Set all the lookup gate wires (including multiplicities) and pad unused LU slots.
 /// Warning: rows are in descending order: the first gate to appear is the last LU gate, and
@@ -130,6 +134,8 @@ pub fn prove<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: 
     common_data: &CommonCircuitData<F, D>,
     inputs: PartialWitness<F>,
     timing: &mut TimingTree,
+    #[cfg(feature = "cuda")]
+    ctx: Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
 ) -> Result<ProofWithPublicInputs<F, C, D>>
 where
     C::Hasher: Hasher<F>,
@@ -141,9 +147,17 @@ where
         generate_partial_witness(inputs, prover_data, common_data)?
     );
 
-    prove_with_partition_witness(prover_data, common_data, partition_witness, timing)
+    prove_with_partition_witness(
+        prover_data,
+        common_data,
+        partition_witness,
+        #[cfg(feature = "cuda")]
+        ctx.expect("CUDA context is required for CUDA prover"),
+        timing,
+    )
 }
 
+#[cfg(not(feature = "cuda"))]
 pub fn prove_with_partition_witness<
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
@@ -456,18 +470,17 @@ where
     let betas = challenger.get_n_challenges(num_challenges);
     let gammas = challenger.get_n_challenges(num_challenges);
 
-    let deltas = vec![];
-    // let deltas = if has_lookup {
-    //     let mut delts = Vec::with_capacity(2 * num_challenges);
-    //     let num_additional_challenges = num_lookup_challenges - 2 * num_challenges;
-    //     let additional = challenger.get_n_challenges(num_additional_challenges);
-    //     delts.extend(&betas);
-    //     delts.extend(&gammas);
-    //     delts.extend(additional);
-    //     delts
-    // } else {
-    //     vec![]
-    // };
+    let deltas = if has_lookup {
+        let mut delts = Vec::with_capacity(2 * num_challenges);
+        let num_additional_challenges = num_lookup_challenges - 2 * num_challenges;
+        let additional = challenger.get_n_challenges(num_additional_challenges);
+        delts.extend(&betas);
+        delts.extend(&gammas);
+        delts.extend(additional);
+        delts
+    } else {
+        vec![]
+    };
 
     assert!(
         common_data.quotient_degree_factor < common_data.config.num_routed_wires,
@@ -495,6 +508,7 @@ where
     // } else {
     //     zs_partial_products
     // };
+    let zs_partial_products_lookups = zs_partial_products;
 
     let zs_partial_products_lookups = &zs_partial_products_lookups.iter().flat_map(|p|p.values.to_vec()).collect::<Vec<_>>();
     let partial_products_zs_and_lookup_commitment = timed!(
@@ -545,7 +559,7 @@ where
                 timing,
                 "copy params to gpu",
                 {
-                    let mut useCnt = zs_partial_products.len() << rate_bits;
+                    let mut useCnt = zs_partial_products_lookups.len() << rate_bits;
                     let (data, remained) = remained.split_at_mut(useCnt);
 
                     let partial_products_and_zs_commitment_leaves_device =
