@@ -239,7 +239,7 @@ void ifft_kernel(GoldilocksField* values_flatten, int poly_num, int values_num_p
         buffer[values_num_per_poly / 2] *= n_inv;
     }
 
-    printf("perpoly_thcnt: %d, values_num_per_poly: %d, value_idx: %d, poly_idx: %d\n", perpoly_thcnt, values_num_per_poly, value_idx, poly_idx);
+    // printf("perpoly_thcnt: %d, values_num_per_poly: %d, value_idx: %d, poly_idx: %d\n", perpoly_thcnt, values_num_per_poly, value_idx, poly_idx);
 
     assert(perpoly_thcnt < values_num_per_poly);
     for (int i = value_idx; i < values_num_per_poly/2; i += perpoly_thcnt) {
@@ -510,11 +510,6 @@ void compute_quotient_values_kernel(
 
 )
 {
-    constexpr int num_challenges = 2;
-    constexpr int num_gate_constraints = 231;
-    assert(num_gate_constraints == _num_gate_constraints);
-    assert(num_challenges == _num_challenges);
-
     int thCnt = get_global_thcnt();
     int gid = get_global_id();
 
