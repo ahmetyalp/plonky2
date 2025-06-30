@@ -962,12 +962,6 @@ struct CommonData {
     int num_routed_wires;
     int quotient_degree_factor;
     int num_gate_constraints;
-
-    constexpr CommonData(int num_constants, int num_challenges, int num_routed_wires,
-            int quotient_degree_factor, int num_gate_constraints)
-        :num_constants(num_constants), num_challenges(num_challenges),
-         num_routed_wires(num_routed_wires), quotient_degree_factor(quotient_degree_factor),
-         num_gate_constraints(num_gate_constraints) {}
 };
 
 constexpr CommonData circuit_common_data() {
