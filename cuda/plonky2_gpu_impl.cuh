@@ -386,7 +386,6 @@ void compute_quotient_values_kernel(
     constexpr int quotient_degree_factor = common_data.quotient_degree_factor;
     constexpr int num_routed_wires = common_data.num_routed_wires;
     constexpr int max_degree = quotient_degree_factor;
-    int max_degree = quotient_degree_factor;
     int num_prods = num_partial_products;
 
 
