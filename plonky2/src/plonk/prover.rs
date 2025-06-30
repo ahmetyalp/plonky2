@@ -645,6 +645,9 @@ where
                         &betas_device,
                         &gammas_device,
 
+                        common_data.num_gate_constraints as i32,
+                        common_data.num_partial_products as i32,
+
                         ctx_ptr as *mut core::ffi::c_void,
                     )
                 }

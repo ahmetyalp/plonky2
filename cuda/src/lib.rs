@@ -139,6 +139,9 @@ extern "C" {
         betas: *const DataSlice,
         gammas: *const DataSlice,
 
+        num_gate_constraints: i32,
+        num_partial_products: i32,
+
         ctx: *mut c_void,
     ) -> cuda::Error;
 

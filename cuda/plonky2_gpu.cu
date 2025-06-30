@@ -557,6 +557,9 @@ extern "C" {
             DataSlice<GoldilocksField>* betas,
             DataSlice<GoldilocksField>* gammas,
 
+            int num_gate_constraints,
+            int num_partial_products,
+
             CudaInvContext* ctx
     ) {
 
@@ -594,18 +597,11 @@ extern "C" {
 //        printf("total_dev_use: %fG\n", (double )total_dev_use/1024/1024/1024);
 
         int num_challenges = 2;
-        int num_gate_constraints = 231;
         int num_constants = 8;
         int num_routed_wires = 80;
         int quotient_degree_factor = 8;
-        int num_partial_products = 9;
-        int constants_sigmas_commitment_leaf_len = 88;
-        int zs_partial_products_commitment_leaf_len = 20;
-        int wires_commitment_leaf_len = 234;
 
-//    printf("%d, %d\n", constants_sigmas_commitment_leaves->len, values_num_per_extpoly*constants_sigmas_commitment_leaf_len);
-        assert(constants_sigmas_commitment_leaves->len    == values_num_per_extpoly*constants_sigmas_commitment_leaf_len);
-        assert(zs_partial_products_commitment_leaves->len == values_num_per_extpoly*zs_partial_products_commitment_leaf_len);
+//    printf("%d, %d\n", constants_sigmas_commitment_leaves->len, values_num_per_extpoly);
         assert(points->len == values_num_per_extpoly);
         assert(alphas->len == num_challenges);
         assert(betas->len == num_challenges);
@@ -624,9 +620,9 @@ extern "C" {
                 d_outs,
                 public_inputs_hash,
 
-                constants_sigmas_commitment_leaves->ptr,     constants_sigmas_commitment_leaf_len,
-                zs_partial_products_commitment_leaves->ptr,  zs_partial_products_commitment_leaf_len,
-                d_ext_values_flatten,                wires_commitment_leaf_len,
+                constants_sigmas_commitment_leaves->ptr,     constants_sigmas_commitment_leaves->len,
+                zs_partial_products_commitment_leaves->ptr,  zs_partial_products_commitment_leaves->len,
+                d_ext_values_flatten,                poly_num,
                 num_constants, num_routed_wires,
                 num_challenges,
                 num_gate_constraints,
