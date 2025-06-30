@@ -371,7 +371,7 @@ void compute_quotient_values_kernel(
     constexpr CommonData common_data = circuit_common_data();
     constexpr int num_challenges = common_data.num_challenges;
     constexpr int num_gate_constraints = common_data.num_gate_constraints;
-    constexpr SelectorsInfo selectors_info = circuit_selectors_info();
+    SelectorsInfo selectors_info = circuit_selectors_info();
     assert(num_gate_constraints == _num_gate_constraints);
     assert(num_challenges == _num_challenges);
 
