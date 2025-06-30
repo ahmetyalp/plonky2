@@ -6,13 +6,6 @@
 #include <stdio.h>
 #include <iostream>
 
-//#define PRINT_HEX(data) \
-//    do  {               \
-//        printf("{");                \
-//        for (int k = 0; k < sizeof(data); ++k) printf("0x%02x%s", ((uint8_t*)&(data))[k], k==sizeof(data)-1?"":", ");\
-//        printf("}\n");\
-//    } while(0)
-
 #define PRINT_HEX_2(PROMT, ARR, N, BUF)					\
   do {									\
     int __my_local_remain = N;						\
@@ -71,100 +64,6 @@ uint8_t data[BYTES];
 
 #define BYTES_ASSIGN(dst, src, len)  \
         *(bytes_pad_type<len>*)(dst) = *(bytes_pad_type<len>*)(src)
-
-#if 0
-class u128 {
-public:
-    uint64_t low;
-    uint64_t high;
-
-    __device__ inline u128(uint64_t l = 0, uint64_t h = 0) : low(l), high(h) {}
-
-    __device__ inline u128 operator+(const u128& other) const {
-        uint64_t sum_low = low + other.low;
-        uint64_t carry = sum_low < low ? 1 : 0;
-        uint64_t sum_high = high + other.high + carry;
-        return u128(sum_low, sum_high);
-    }
-
-    __device__ inline u128 operator-(const u128& other) const {
-        uint64_t diff_low = low - other.low;
-        uint64_t borrow = diff_low > low ? 1 : 0;
-        uint64_t diff_high = high - other.high - borrow;
-        return u128(diff_low, diff_high);
-    }
-
-    __device__ inline u128 operator*(const u128& other) const {
-//        uint64_t a0 = low & 0xFFFFFFFF;
-//        uint64_t a1 = low >> 32;
-//        uint64_t b0 = other.low & 0xFFFFFFFF;
-//        uint64_t b1 = other.low >> 32;
-//
-//        uint64_t prod0 = a0 * b0;
-//        uint64_t prod1 = a1 * b0 + (prod0 >> 32);
-//        uint64_t prod2 = a0 * b1 + (prod1 & 0xFFFFFFFF);
-//        uint64_t prod3 = a1 * b1 + (prod2 >> 32);
-//
-//        uint64_t carry = (prod3 >> 32) + (prod2 >> 32) + (prod1 >> 32);
-//        uint64_t result_low = (prod0 & 0xFFFFFFFF) | (prod1 << 32);
-//        uint64_t result_high = prod3 + carry;
-//
-//        return u128{result_low, result_high};
-        auto b = other;
-        auto a = *this;
-
-        u128 result = {0, 0};
-        for (int i = 0; i < 64; i++) {
-            if (b.low & 1) {
-                result = result + a;
-            }
-            a = a << 1;
-            b.low >>= 1;
-        }
-        return result;
-
-    }
-
-    __device__ inline u128& operator+=(const u128& other) {
-        *this = *this + other;
-        return *this;
-    }
-
-    __device__ inline u128 operator>>(int shift) const {
-        if (shift >= 128) {
-            return u128(0, 0);
-        } else if (shift >= 64) {
-            return u128(high >> (shift - 64), 0);
-        } else {
-            return u128((low >> shift) | (high << (64 - shift)), high >> shift);
-        }
-    }
-
-    __device__ inline u128 operator<<(int shift) const {
-        u128 result;
-        if (shift >= 64) {
-            result.high = this->low << (shift - 64);
-            result.low = 0;
-        } else {
-            result.high = (this->high << shift) | (this->low >> (64 - shift));
-            result.low = this->low << shift;
-        }
-        return result;
-        return result;
-    }
-
-    __device__ inline u128 overflowing_add(const u128& other, bool* overflow) const {
-        u128 result = *this + other;
-        *overflow = (result.high < high) || ((result.high == high) && (result.low < low));
-        return result;
-    }
-
-    __device__ inline operator uint64_t() const {
-        return low;
-    }
-
-};
-#endif
 
 struct  GoldilocksField{
     uint64_t data;
@@ -1054,6 +953,25 @@ GoldilocksField reduce_with_powers(GoldilocksFieldView terms, GoldilocksField al
 __device__ inline
 static constexpr usize ceil_div_usize(usize a, usize b) {
     return (a + b - 1) / b;
+}
+
+
+struct CommonData {
+    int num_constants;
+    int num_challenges;
+    int num_routed_wires;
+    int quotient_degree_factor;
+    int num_gate_constraints;
+}
+
+constexpr CommonData circuit_common_data() {
+    return CommonData{
+        .num_constants = 8,
+        .num_challenges = 2,
+        .num_routed_wires = 80,
+        .quotient_degree_factor = 8,
+        .num_gate_constraints = 123
+    };
 }
 
 #endif

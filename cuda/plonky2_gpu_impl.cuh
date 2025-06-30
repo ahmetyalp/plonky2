@@ -3,8 +3,6 @@
 __global__
 void ifft_kernel(GoldilocksField* values_flatten, int poly_num, int values_num_per_poly, int log_len, const GoldilocksField* root_table, GoldilocksField n_inv);
 
-//__global__
-//void reverse_index_bits_kernel(GoldilocksField* values_flatten, int poly_num, int values_num_per_poly, int log_len);
 
 //#ifdef __CUDA_ARCH__
 #if 1
@@ -27,28 +25,8 @@ unsigned int bitrev(unsigned int num, const int log_len) {
 __device__
 void reverse_index_bits(GoldilocksField* values_flatten, int poly_num, int values_num_per_poly, int log_len)
 {
-//    int thCnt = get_global_thcnt();
-//    int gid = get_global_id();
-//
-//    for (unsigned i = gid; i < values_num_per_poly*poly_num; i += thCnt) {
-//        unsigned idx = i % values_num_per_poly;
-//        unsigned poly_idx = i / values_num_per_poly;
-//
-//        unsigned ridx = bitrev(idx, log_len);
-//        GoldilocksField *values = values_flatten + values_num_per_poly*poly_idx;
-//        assert(ridx < values_num_per_poly);
-//        if (idx < ridx) {
-//            auto tmp = values[idx];
-//            values[idx] = values[ridx];
-//            values[ridx] = tmp;
-//        }
-//
-//    }
-
     int thCnt = get_global_thcnt();
     int gid = get_global_id();
-//    if (thCnt >= values_num_per_poly * poly_num)
-//        return;
 
     assert((1 << log_len) == values_num_per_poly);
     assert(thCnt >= poly_num);
@@ -70,10 +48,6 @@ void reverse_index_bits(GoldilocksField* values_flatten, int poly_num, int value
             values[idx] = values[ridx];
             values[ridx] = tmp;
         }
-//        if (poly_idx == 232 && idx == 28724 && log_len == 21) {
-//            printf("gid: %d, idx: %u, ridx: %u, addr: %p, value:%016lx, rvalue:%016lx\n", gid, idx, ridx, &values[idx], values[idx].data, values[ridx].data);
-//        }
-
     }
 
     __syncthreads();
@@ -86,28 +60,7 @@ void reverse_index_bits_kernel(GoldilocksField* values_flatten, int poly_num, in
 
 __device__
 void fft_dispatch(GoldilocksField* values_flatten, int poly_num, int values_num_per_poly, int log_len, const GoldilocksField* root_table, int r) {
-//    if (get_global_id() == 0 && poly_num == 20) {
-//        printf("buf1: \n");
-//        for (int j = 0; j < 20; ++j) {
-//            for (int i = 0; i < values_num_per_poly; ++i) {
-//                printf("%016lX\n", values_flatten[i + j*values_num_per_poly].data);
-//            }
-//            printf("end: %d\n", j);
-//        }
-//        printf("\n");
-//    }
     reverse_index_bits(values_flatten, poly_num, values_num_per_poly, log_len);
-//    if (get_global_id() == 0 && poly_num == 2) printf("after  reverse v1: %lx\n", values_flatten[0].data);
-//    if (get_global_id() == 0 && poly_num == 2) printf("after  reverse v2: %lx\n", values_flatten[1].data);
-
-//    __syncthreads();
-//    if (get_global_id() == 0) {
-//        printf("buf2: ");
-//        for (int i = (1<<20); i < 8+(1<<20); ++i) {
-//            printf("%016lX, ", values_flatten[i].data);
-//        }
-//        printf("\n");
-//    }
 
     int thCnt = get_global_thcnt();
     int gid = get_global_id();
@@ -133,11 +86,6 @@ void fft_dispatch(GoldilocksField* values_flatten, int poly_num, int values_num_
         for (int i = value_idx; i < values_num_per_poly; i += perpoly_thcnt) {
             if (i % (1<<r) > 0) {
                 assert(packed_values[i].data == 0);
-
-//                if (packed_values[i].data != 0) {
-//                    printf("in gid: %d, vid: %d, poly_idx: %d, i: %d, data: %016lx\n", gid, value_idx, poly_idx, i, packed_values[i].data);
-////                    assert(0);
-//                }
             }
             packed_values[i] = packed_values[i & mask];
         }
@@ -156,12 +104,6 @@ void fft_dispatch(GoldilocksField* values_flatten, int poly_num, int values_num_
         if (lg_half_m > 0)
             omega_table += 1;
 
-//            for (int k = 0; k < packed_n;  k += packed_m) {
-//        for (int k = value_idx*perbatch_valcnt; k < (value_idx+1)*perbatch_valcnt;  k += packed_m) {
-//            for (int j = 0; j < half_packed_m; ++j ) {
-//        perpoly_thcnt / half_packed_m
-
-//        for (int k = 0; k < packed_n/packed_m;  ++k) {
         for (int k = value_idx; k < packed_n/2;  k += perpoly_thcnt) {
             int kk = (k*2 / packed_m) * packed_m;
             int j  = k*2%packed_m / 2;
@@ -170,54 +112,15 @@ void fft_dispatch(GoldilocksField* values_flatten, int poly_num, int values_num_
             GoldilocksField u = packed_values[kk + j];
             packed_values[kk + j] = u + t;
             packed_values[kk + half_packed_m + j] = u - t;
-//            if (lg_half_m == 0 && poly_num == 2 && poly_idx == 0 && k == 0)
-//                printf("in round 0 k: %d v1: %lx, omega: %lx, t: %lx, tt: %lx, u: %lx, kk:%d, j:%d\n",
-//                       lg_half_m, values_flatten[0].data, omega.data, t.data, packed_values[kk + half_packed_m + j].data, u.data, kk, j);
-
         }
 
-//        if (get_global_id() == 0) {
-//            printf("buf5 lg_half_m:%d: ", lg_half_m);
-//            for (int i = (1<<20); i < 8+(1<<20); ++i) {
-//                printf("%016lX, ", packed_values[i].data);
-//            }
-//            printf("\n");
-//        }
         __syncthreads();
-
-//        if (value_idx == 0 && poly_num == 2 && poly_idx == 0) printf("in round: %d v1: %lx\n", lg_half_m, values_flatten[0].data);
-
     }
-//    reverse_index_bits(values_flatten, poly_num, values_num_per_poly, log_len);
-
-
-//    if (get_global_id() == 0) {
-//        printf("buf3: ");
-//        for (int i = (1<<20); i < 8+(1<<20); ++i) {
-//            printf("%016lX, ", values_flatten[i].data);
-//        }
-//        printf("\n");
-//    }
-//
-
-
-//    if (get_global_id() == 0) {
-//        printf("buf4: ");
-//        for (int i = (1<<20); i < 8+(1<<20); ++i) {
-//            printf("%016lX, ", values_flatten[i].data);
-//        }
-//        printf("\n");
-//    }
-
 }
 
 __global__
 void ifft_kernel(GoldilocksField* values_flatten, int poly_num, int values_num_per_poly, int log_len, const GoldilocksField* root_table, GoldilocksField n_inv) {
-//    if (get_global_id() == 0 && poly_num == 2) printf("before fft_dispatch v1: %lx\n", values_flatten[0].data);
-//    if (get_global_id() == 0 && poly_num == 2) printf("before fft_dispatch v2: %lx\n", values_flatten[1<<20].data);
     fft_dispatch(values_flatten, poly_num, values_num_per_poly, log_len, root_table, 0);
-//    if (get_global_id() == 0 && poly_num == 2) printf("after fft_dispatch v1: %lx\n", values_flatten[0].data);
-//    if (get_global_id() == 0 && poly_num == 2) printf("after fft_dispatch v2: %lx\n", values_flatten[1<<20].data);
 
     int thCnt = get_global_thcnt();
     int gid = get_global_id();
@@ -266,10 +169,6 @@ void lde_kernel(const GoldilocksField* values_flatten, GoldilocksField* ext_valu
     int gid = get_global_id();
 
     int values_num_per_poly2 = values_num_per_poly * (1<<rate_bits);
-//    for (int i = gid; i < poly_num*values_num_per_poly2; i += thCnt) {
-//        assert(ext_values_flatten[i].data == 0);
-//    }
-//    return;
 
     for (int i = gid; i < poly_num*values_num_per_poly; i += thCnt) {
         unsigned idx = i % values_num_per_poly;
@@ -298,6 +197,7 @@ void init_lde_kernel(GoldilocksField* values_flatten, int poly_num, int values_n
     }
 
 }
+
 __global__
 void mul_shift_kernel(GoldilocksField* values_flatten, int poly_num, int values_num_per_poly, int rate_bits, const GoldilocksField* shift_powers)
 {
@@ -337,8 +237,6 @@ static __device__ inline int find_digest_index(int layer, int idx, int cap_len, 
     }
 
     if (layer > 0) {
-//        idx += c_len;
-//        c_len *= 2;
         d_len = 2*(d_len+1);
         if (at_right) {
             d_idx -= 1;
@@ -348,6 +246,7 @@ static __device__ inline int find_digest_index(int layer, int idx, int cap_len, 
     assert(d_idx < digest_len && d_idx >= 0);
     return d_idx;
 }
+
 __global__
 void hash_leaves_kernel(GoldilocksField* values_flatten, int poly_num, int leaves_len,
                         PoseidonHasher::HashOut* digest_buf, int len_cap, int num_digests)
@@ -374,39 +273,8 @@ void hash_leaves_kernel(GoldilocksField* values_flatten, int poly_num, int leave
         const int ith_cap = i / cap_len;
         const int idx = i % cap_len;
         int d_idx = find_digest_index(0, idx, cap_len, digest_len);
-//        if (i < 512)
-//            printf("gid: %d, i:%d, ith_cap:%d, idx:%d, d_idx: %d\n", gid, i, ith_cap, idx, d_idx);
-
         assert((d_idx < digest_len));
         digest_buf[d_idx + ith_cap*digest_len] = *(PoseidonHasher::HashOut*)state;
-
-//        if (ith_cap == 0 && idx >= cap_len/2)
-//        {
-////            for (int k = 0; k < 8; ++k)
-////                printf("leaves%d: %lu\n", k, values_flatten[leaves_len*k].data);
-////            printf("d_idx: %d \n", d_idx);
-//
-////            PRINT_HEX("hash", digest_buf[d_idx + ith_cap*digest_len]);
-//            char buf[30 + sizeof(PoseidonHasher::HashOut)*2];
-//            auto data = (uint8_t*)&digest_buf[d_idx + ith_cap*digest_len];
-//            int k = 0;
-//            int n = 0;
-//            for (; k < sizeof(PoseidonHasher::HashOut); ++k) {
-//                int v = data[k];
-//                buf[k*2 +n]   = ((v >> 4)>9? (v >> 4)-10 +'a': (v >> 4) +'0');
-//                buf[k*2+1 +n] = ((v & 0xF)>9? (v & 0xF)-10 +'a': (v & 0xF) +'0');
-//
-//                if ((k+1) % 8 == 0 && k != sizeof(PoseidonHasher::HashOut)-1) {
-//                    buf[k*2+1+n +1] = ',';
-//                    buf[k*2+1+n +2] = ' ';
-//                    n+=2;
-//                }
-//            }
-//            buf[k*2 +n] = 0;
-//            printf("capid: %d, idx: %d, hash: %s\n", ith_cap, idx, buf);
-//        }
-
-//        digest_buf[i] = *(PoseidonHasher::HashOut*)state;
     }
 }
 
@@ -445,22 +313,13 @@ void reduce_digests_kernel(int leaves_len, PoseidonHasher::HashOut* digest_buf, 
             if (cap_len == 2) {
                 assert(old_cap_len > (1<<layer));
                 cap_buf[ith_cap] = *(PoseidonHasher::HashOut*)perm_inputs;
-
-//                printf("cap: %d, ", ith_cap);
-//                printf("h1 "); PRINT_HEX("hash", h1);
-//                printf("h2 "); PRINT_HEX("hash", h2);
-//
-//                PRINT_HEX("hash", cap_buf[ith_cap]);
             } else {
                 int idx3 = find_digest_index(layer+1, i, old_cap_len, digest_len);
-//                if (ith_cap == 0 && i < 100 && layer == 0)
-//                    printf("i: %d, idx: %d\n", i, idx3);
                 digest_buf[idx3] = *(PoseidonHasher::HashOut*)perm_inputs;
             }
         }
         __syncthreads();
     }
-
 }
 
 __global__
@@ -483,7 +342,6 @@ void transpose_kernel(GoldilocksField* src_values_flatten, GoldilocksField* dst_
 
 #include "gates-def.cuh"
 
-
 __global__
 void compute_quotient_values_kernel(
         int degree_log, int rate_bits, GoldilocksField* points, GoldilocksField* outs,
@@ -493,11 +351,11 @@ void compute_quotient_values_kernel(
         GoldilocksField* constants_sigmas_commitment_leaves,     int constants_sigmas_commitment_leaf_len,
         GoldilocksField* zs_partial_products_commitment_leaves,  int zs_partial_products_commitment_leaf_len,
         GoldilocksField* wires_commitment_leaves,                int wires_commitment_leaf_len,
-        int num_constants, int num_routed_wires,
-        int num_challenges,
-        int num_gate_constraints,
+        int num_constants, int _num_routed_wires,
+        int _num_challenges,
+        int _num_gate_constraints,
 
-        int quotient_degree_factor,
+        int _quotient_degree_factor,
         int num_partial_products,
 
         GoldilocksField* z_h_on_coset_evals,
@@ -510,30 +368,27 @@ void compute_quotient_values_kernel(
 
 )
 {
+    constexpr CommonData common_data = circuit_common_data();
+    constexpr int num_challenges = common_data.num_challenges;
+    constexpr int num_gate_constraints = common_data.num_gate_constraints;
+    assert(num_gate_constraints == _num_gate_constraints);
+    assert(num_challenges == _num_challenges);
+
     int thCnt = get_global_thcnt();
     int gid = get_global_id();
 
-//    if (gid == 0) {
-//        auto res = GoldilocksField::from_canonical_u64(0xfff923c55a2e4a87) * GoldilocksField::from_canonical_u64(0xbfa99fe2edeb56f5);
-//        printf("mul: %lx\n", res.data);
-////        assert(res == GoldilocksField::from_canonical_u64(1));
-//    }
 
     int step = 1;
     int next_step = 8;
     int values_num_per_extpoly = (1<<(rate_bits+degree_log));
-//    int values_num_per_extpoly = 1;
     int lde_size  = values_num_per_extpoly;
 
+    constexpr int quotient_degree_factor = common_data.quotient_degree_factor;
+    constexpr int num_routed_wires = common_data.num_routed_wires;
+    constexpr int max_degree = quotient_degree_factor;
     int max_degree = quotient_degree_factor;
     int num_prods = num_partial_products;
 
-//    if (gid == 0) {
-//        GoldilocksFieldView{alphas, num_challenges}.print_hex("alphas");
-//        GoldilocksFieldView{betas, num_challenges}.print_hex("betas");
-//        GoldilocksFieldView{gammas, num_challenges}.print_hex("gammas");
-//
-//    }
 
     auto get_lde_values = [degree_log, rate_bits](GoldilocksField* leaves, int leaf_len, int i, int step) -> GoldilocksFieldView {
         int index = i * step;
@@ -558,23 +413,7 @@ void compute_quotient_values_kernel(
 
         auto partial_products = local_zs_partial_products.view(num_challenges);
 
-//        if (index == 1048576) {
-//            printf("i: %d, len: %d, lcs: ", index, local_constants_sigmas.len);
-//            local_constants_sigmas.print_hex();
-//            printf("i: %d, len: %d, lw: ", index, local_wires.len);
-//            local_wires.print_hex();
-//            printf("i: %d, len: %d, lzpp: ", index, local_zs_partial_products.len);
-//            local_zs_partial_products.print_hex();
-//            printf("i: %d, len: %d, nzs: ", index, next_zs.len);
-//            next_zs.print_hex();
-//        }
-
-//        let constraint_terms_batch =
-//        evaluate_gate_constraints_base_batch::<F, C, D>(common_data, vars_batch);
-
         assert(num_routed_wires % max_degree == 0);
-
-//        let constraint_terms = PackedStridedView::new(&constraint_terms_batch, n, k);
 
         GoldilocksField res[num_challenges] = {0};
 
@@ -679,13 +518,6 @@ void compute_quotient_values_kernel(
             PoseidonGate PoseidonGate_ins;
             DECL_GATE_NAME(PoseidonGate,PoseidonGate_ins, 24);
 
-//            if (index == 1048576) {
-//                printf("i: %d, local_constants: ", index);
-//                local_constants.print_hex();
-//                printf("i: %d, local_wires: ", index);
-//                local_wires.print_hex();
-//            }
-
             GoldilocksField terms[num_gate_constraints];
             auto evaluate_gate_constraints_base_batch = [index, public_inputs_hash, &constraint_terms_batch, &terms, gate_objs, selectors_info, local_constants, local_wires]() {
                 for (int row = 0; row < num_gates; ++row) {
@@ -724,11 +556,6 @@ void compute_quotient_values_kernel(
                             .index = index
                     };
 
-//                    if (index == 1048576) {
-//                        printf("i: %d, row: %d, filter: ", index, row);
-//                        filter.print_hex(nullptr, GoldilocksField::newline);
-//                    }
-
                     for (int i = 0; i < gate.num_constraints; ++i) {
                         terms[i] = GoldilocksField{0};
                     }
@@ -736,10 +563,6 @@ void compute_quotient_values_kernel(
                     auto fn = gate.func;
                     auto yield_constr =  StridedConstraintConsumer{terms, &terms[gate.num_constraints]};
                     ((gate.gate)->*fn)(vars, yield_constr);
-//                    if (index == 1048576) {
-//                        printf("i: %d, row: %d, terms: ", index, row);
-//                        GoldilocksFieldView{terms, gate.num_constraints}.print_hex();
-//                    }
 
                     for (int i = 0; i < gate.num_constraints; ++i) {
                         constraint_terms_batch[i] += terms[i] * filter;
@@ -751,15 +574,12 @@ void compute_quotient_values_kernel(
             evaluate_gate_constraints_base_batch();
         };
         evaluate_gate_constraints_base_batch();
-//        if (index == 1048576) {
-//            printf("i: %d, constraint_terms: ", index);
-//            GoldilocksFieldView{constraint_terms_batch, num_gate_constraints}.print_hex();
-//        }
+
         for (int i = num_gate_constraints-1; i >= 0; --i) {
             reduce_with_powers(constraint_terms_batch[i]);
         }
 
-        int vanishing_partial_products_terms_len = num_challenges * num_routed_wires/max_degree;
+        constexpr int vanishing_partial_products_terms_len = num_challenges * num_routed_wires/max_degree;
         GoldilocksField vanishing_partial_products_terms[vanishing_partial_products_terms_len];
         for (int i = 0; i < num_challenges; ++i) {
             auto z_x = local_zs[i];
@@ -778,7 +598,7 @@ void compute_quotient_values_kernel(
 //            );
 
             GoldilocksField prev_acc, next_acc;
-            int partial_product_rounds = num_routed_wires/max_degree;
+            constexpr int partial_product_rounds = num_routed_wires/max_degree;
             assert(current_partial_products.len == partial_product_rounds-1);
             for (int k = 0; k < partial_product_rounds; ++k) {
                 GoldilocksField num_chunk_product = GoldilocksField::from_canonical_u64(1);
@@ -788,13 +608,6 @@ void compute_quotient_values_kernel(
                     auto s_id = k_i * x;
                     auto v = wire_value + betas[i] * s_id + gammas[i];
                     num_chunk_product *= v;
-//                    if (index == 1048576) {
-//                        printf("i: %d, wi: %d, ", index, j);
-//                        wire_value.print_hex("wire_value", GoldilocksField::colum_space);
-//                        k_i.print_hex("k_i", GoldilocksField::colum_space);
-//                        x.print_hex("x", GoldilocksField::newline);
-//                        v.print_hex("v", GoldilocksField::newline);
-//                    }
                 }
                 GoldilocksField den_chunk_product = GoldilocksField::from_canonical_u64(1);
                 for (int j = k*max_degree; j < (k+1)*max_degree; ++j) {
@@ -814,44 +627,21 @@ void compute_quotient_values_kernel(
                     next_acc = current_partial_products[k];
 
                 vanishing_partial_products_terms[i * partial_product_rounds + k] = (prev_acc * num_chunk_product - next_acc * den_chunk_product);
-
-//                if (index == 1048576) {
-//                    printf("i: %d, partial_product_checks: ", index);
-//                    GoldilocksFieldView{vanishing_partial_products_terms, vanishing_partial_products_terms_len}.print_hex();
-//                }
-
             }
         }
-//        if (index == 1048576) {
-//            printf("i: %d, term: ", index);
-//            GoldilocksFieldView{vanishing_partial_products_terms, vanishing_partial_products_terms_len}.print_hex();
-//        }
+
         for (int i = vanishing_partial_products_terms_len-1; i >= 0; --i) {
             reduce_with_powers(vanishing_partial_products_terms[i]);
         }
 
         auto eval_l_0 = [z_h_on_coset_evals, rate_bits, degree_log](int index, GoldilocksField x) -> GoldilocksField {
-//            if ((GoldilocksField::from_canonical_u64(1 << degree_log) * (x - GoldilocksField{1})).data == 0xfff923c55a2e4a87)
-//                printf("index: %d\n", index);
-
             return z_h_on_coset_evals[index % (1<<rate_bits)] *
-//                    (GoldilocksField::from_canonical_u64(1 << degree_log) * (x - GoldilocksField{1}));
                     (GoldilocksField::from_canonical_u64(1 << degree_log) * (x - GoldilocksField{1})).inverse();
-
         };
 
         auto l_0_x = eval_l_0(index, x);
-//        if (index == 1048576) {
-//            l_0_x.print_hex("l_0_x", GoldilocksField::colum_space);
-//            z_h_on_coset_evals[index%(1<<rate_bits)].print_hex("ev", GoldilocksField::colum_space);
-//            auto den = (GoldilocksField::from_canonical_u64(1<<degree_log) * (x - GoldilocksField{1}));
-//            den.print_hex("den", GoldilocksField::colum_space);
-//            den.inverse().print_hex("denv", GoldilocksField::newline);
-//        }
-
         for (int i = num_challenges-1; i >= 0; --i) {
             auto z_x = local_zs[i];
-//            res[0] = GoldilocksField::from_canonical_u64(0);
             reduce_with_powers(l_0_x * z_x.sub_one());
         }
 
@@ -860,11 +650,6 @@ void compute_quotient_values_kernel(
         for (int i = 0; i < num_challenges; ++i) {
             res[i] *= denominator_inv;
         }
-//
-//        if (index == 1048576) {
-//            printf("i: %d, res: ", index);
-//            GoldilocksFieldView{res, num_challenges}.print_hex();
-//        }
 
         outs[index*2]   = res[0];
         outs[index*2+1] = res[1];
@@ -883,11 +668,6 @@ void mul_kernel(GoldilocksField* values_flatten, int poly_num, int values_num_pe
         unsigned poly_idx = i / values_num_per_poly;
 
         GoldilocksField* values = values_flatten + poly_idx*values_num_per_poly;
-//        if (idx == 2086137) {
-//            printf("i: %d, poly:%d, res: ", idx, poly_idx);
-//            values[idx].print_hex(nullptr, GoldilocksField::newline);
-//        }
-
         values[idx] *= mul_values[idx];
     }
 }
