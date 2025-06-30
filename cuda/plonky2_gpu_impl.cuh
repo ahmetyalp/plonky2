@@ -493,11 +493,11 @@ void compute_quotient_values_kernel(
         GoldilocksField* constants_sigmas_commitment_leaves,     int constants_sigmas_commitment_leaf_len,
         GoldilocksField* zs_partial_products_commitment_leaves,  int zs_partial_products_commitment_leaf_len,
         GoldilocksField* wires_commitment_leaves,                int wires_commitment_leaf_len,
-        int num_constants, int _num_routed_wires,
-        int _num_challenges,
-        int _num_gate_constraints,
+        int num_constants, int num_routed_wires,
+        int num_challenges,
+        int num_gate_constraints,
 
-        int _quotient_degree_factor,
+        int quotient_degree_factor,
         int num_partial_products,
 
         GoldilocksField* z_h_on_coset_evals,
@@ -525,8 +525,6 @@ void compute_quotient_values_kernel(
 //    int values_num_per_extpoly = 1;
     int lde_size  = values_num_per_extpoly;
 
-    constexpr int quotient_degree_factor = 8;
-    constexpr int num_routed_wires = 80;
     constexpr int max_degree = quotient_degree_factor;
     int num_prods = num_partial_products;
 
