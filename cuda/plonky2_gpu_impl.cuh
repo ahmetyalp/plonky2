@@ -759,7 +759,7 @@ void compute_quotient_values_kernel(
             reduce_with_powers(constraint_terms_batch[i]);
         }
 
-        constexpr int vanishing_partial_products_terms_len = num_challenges * num_routed_wires/max_degree;
+        int vanishing_partial_products_terms_len = num_challenges * num_routed_wires/max_degree;
         GoldilocksField vanishing_partial_products_terms[vanishing_partial_products_terms_len];
         for (int i = 0; i < num_challenges; ++i) {
             auto z_x = local_zs[i];
@@ -778,7 +778,7 @@ void compute_quotient_values_kernel(
 //            );
 
             GoldilocksField prev_acc, next_acc;
-            constexpr int partial_product_rounds = num_routed_wires/max_degree;
+            int partial_product_rounds = num_routed_wires/max_degree;
             assert(current_partial_products.len == partial_product_rounds-1);
             for (int k = 0; k < partial_product_rounds; ++k) {
                 GoldilocksField num_chunk_product = GoldilocksField::from_canonical_u64(1);
