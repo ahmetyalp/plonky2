@@ -239,6 +239,8 @@ void ifft_kernel(GoldilocksField* values_flatten, int poly_num, int values_num_p
         buffer[values_num_per_poly / 2] *= n_inv;
     }
 
+    printf("perpoly_thcnt: %d, values_num_per_poly: %d, value_idx: %d, poly_idx: %d\n", perpoly_thcnt, values_num_per_poly, value_idx, poly_idx);
+
     assert(perpoly_thcnt < values_num_per_poly);
     for (int i = value_idx; i < values_num_per_poly/2; i += perpoly_thcnt) {
         if (i == 0)
