@@ -964,7 +964,8 @@ struct CommonData {
     int num_gate_constraints;
 };
 
-constexpr CommonData circuit_common_data() {
+__device__ constexpr
+CommonData circuit_common_data() {
     return CommonData{
         .num_constants = 8,
         .num_challenges = 2,
