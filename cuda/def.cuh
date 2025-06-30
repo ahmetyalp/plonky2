@@ -968,11 +968,22 @@ struct CommonData {
     int num_routed_wires;
     int quotient_degree_factor;
     int num_gate_constraints;
-    SelectorsInfo selectors_info;
 };
 
 __device__ constexpr
 CommonData circuit_common_data() {
+
+    return CommonData{
+        .num_constants = 8,
+        .num_challenges = 2,
+        .num_routed_wires = 80,
+        .quotient_degree_factor = 8,
+        .num_gate_constraints = 123,
+    };
+}
+
+__device__ inline
+Selectorsinfo circuit_selectors_info() {
     int selector_indices[25] = {
             0, 0, 0, 0, 1
     };
@@ -988,14 +999,7 @@ CommonData circuit_common_data() {
             .num_selectors = num_selectors
     };
 
-    return CommonData{
-        .num_constants = 8,
-        .num_challenges = 2,
-        .num_routed_wires = 80,
-        .quotient_degree_factor = 8,
-        .num_gate_constraints = 123,
-        .selectors_info = selectors_info
-    };
+    return selectors_info;
 }
 
 #endif
