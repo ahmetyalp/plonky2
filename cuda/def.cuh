@@ -968,7 +968,7 @@ struct CommonData {
         :num_constants(num_constants), num_challenges(num_challenges),
          num_routed_wires(num_routed_wires), quotient_degree_factor(quotient_degree_factor),
          num_gate_constraints(num_gate_constraints) {}
-}
+};
 
 constexpr CommonData circuit_common_data() {
     return CommonData{
