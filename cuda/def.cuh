@@ -956,22 +956,45 @@ static constexpr usize ceil_div_usize(usize a, usize b) {
 }
 
 
+struct SelectorsInfo {
+    int *selector_indices;
+    Range<int>* groups;
+    int num_selectors;
+};
+
 struct CommonData {
     int num_constants;
     int num_challenges;
     int num_routed_wires;
     int quotient_degree_factor;
     int num_gate_constraints;
+    SelectorsInfo selectors_info;
 };
 
 __device__ constexpr
 CommonData circuit_common_data() {
+    int selector_indices[25] = {
+            0, 0, 0, 0, 1
+    };
+
+    constexpr  int num_selectors = 2;
+    Range<int> groups[num_selectors] = {
+            Range<int>{0,4},
+            Range<int>{4,5}
+    };
+    SelectorsInfo selectors_info = {
+            .selector_indices = selector_indices,
+            .groups = groups,
+            .num_selectors = num_selectors
+    };
+
     return CommonData{
         .num_constants = 8,
         .num_challenges = 2,
         .num_routed_wires = 80,
         .quotient_degree_factor = 8,
-        .num_gate_constraints = 123
+        .num_gate_constraints = 123,
+        .selectors_info = selectors_info
     };
 }
 

@@ -371,6 +371,7 @@ void compute_quotient_values_kernel(
     constexpr CommonData common_data = circuit_common_data();
     constexpr int num_challenges = common_data.num_challenges;
     constexpr int num_gate_constraints = common_data.num_gate_constraints;
+    constexpr SelectorsInfo selectors_info = commmon_data.selectors_info;
     assert(num_gate_constraints == _num_gate_constraints);
     assert(num_challenges == _num_challenges);
 
@@ -425,29 +426,6 @@ void compute_quotient_values_kernel(
         GoldilocksField constraint_terms_batch[num_gate_constraints] = {0};
         auto evaluate_gate_constraints_base_batch = [&]()
         {
-            struct SelectorsInfo {
-                int *selector_indices;
-                Range<int>* groups;
-            };
-
-            int selector_indices[25] = {
-                    0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 5
-            };
-
-            constexpr  int num_selectors = 6;
-            Range<int> groups[num_selectors] = {
-                    Range<int>{0,6},
-                    Range<int>{6,11},
-                    Range<int>{11,16},
-                    Range<int>{16,21},
-                    Range<int>{21,24},
-                    Range<int>{24,25}
-            };
-            SelectorsInfo selectors_info = {
-                    .selector_indices = selector_indices,
-                    .groups = groups
-            };
-
             struct BaseGate {};
             using FUNC = void (BaseGate::*)(EvaluationVarsBasePacked, StridedConstraintConsumer yield_constr);
 
@@ -545,11 +523,11 @@ void compute_quotient_values_kernel(
                             row,
                             selectors_info.groups[selector_index],
                             local_constants[selector_index],
-                            num_selectors > 1
+                            selectors_info.num_selectors > 1
                     );
 
                     EvaluationVarsBasePacked vars = {
-                            .local_constants = local_constants.view(num_selectors, local_constants.len),
+                            .local_constants = local_constants.view(selectors_info.num_selectors, local_constants.len),
                             .local_wires = local_wires,
                             .public_inputs_hash = public_inputs_hash,
                             .index = index
