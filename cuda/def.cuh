@@ -983,7 +983,7 @@ CommonData circuit_common_data() {
 }
 
 __device__ inline
-Selectorsinfo circuit_selectors_info() {
+SelectorsInfo circuit_selectors_info() {
     int selector_indices[25] = {
             0, 0, 0, 0, 1
     };
