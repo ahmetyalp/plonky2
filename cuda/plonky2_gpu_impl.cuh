@@ -525,7 +525,7 @@ void compute_quotient_values_kernel(
 //    int values_num_per_extpoly = 1;
     int lde_size  = values_num_per_extpoly;
 
-    constexpr int max_degree = quotient_degree_factor;
+    int max_degree = quotient_degree_factor;
     int num_prods = num_partial_products;
 
 //    if (gid == 0) {
