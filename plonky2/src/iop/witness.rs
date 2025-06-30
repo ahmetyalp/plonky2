@@ -289,7 +289,11 @@ pub struct MatrixWitness<F: Field> {
 
 impl<F: Field> MatrixWitness<F> {
     pub fn get_wire(&self, gate: usize, input: usize) -> F {
-        self.wire_values[input][gate]
+        if self.flatten_wire_values.is_empty() {
+            self.wire_values[input][gate]
+        } else {
+            self.flatten_wire_values[input*self.degree + gate]
+        }
     }
 }
 
