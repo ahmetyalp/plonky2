@@ -372,7 +372,6 @@ void compute_quotient_values_kernel(
     constexpr int num_challenges = common_data.num_challenges;
     constexpr int num_gate_constraints = common_data.num_gate_constraints;
     constexpr const int num_gates = common_data.num_gates;
-    SelectorsInfo selectors_info = circuit_selectors_info();
     assert(num_gate_constraints == _num_gate_constraints);
     assert(num_challenges == _num_challenges);
 
@@ -427,6 +426,8 @@ void compute_quotient_values_kernel(
         GoldilocksField constraint_terms_batch[num_gate_constraints] = {0};
         auto evaluate_gate_constraints_base_batch = [&]()
         {
+            SelectorsInfo selectors_info = circuit_selectors_info();
+
             struct BaseGate {};
             using FUNC = void (BaseGate::*)(EvaluationVarsBasePacked, StridedConstraintConsumer yield_constr);
 
@@ -504,7 +505,7 @@ void compute_quotient_values_kernel(
                     auto compute_filter = [](int row, Range<int> group_range, GoldilocksField s,
                                              bool many_selector) -> GoldilocksField {
                         // assert(group_range.contains(row));
-                        printf("row: %d, group_range: (%d, %d)\n", row, group_range.first, group_range.second);
+                        printf("row: %d, group_range: (%d, %d)\n", row, group_range->first, group_range->second);
                         GoldilocksField res = {1};
                         for (int i = group_range.first; i < group_range.second; ++i) {
                             if (i == row)
