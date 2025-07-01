@@ -698,6 +698,10 @@ impl<F: RichField + Extendable<D>, const D: usize> CommonCircuitData<F, D> {
         ]
         .concat()
     }
+
+    pub fn num_gates(&self) -> usize {
+        self.gates.len()
+    }
 }
 
 /// The `Target` version of `VerifierCircuitData`, for use inside recursive circuits. Note that this

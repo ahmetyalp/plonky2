@@ -968,6 +968,7 @@ struct CommonData {
     int num_routed_wires;
     int quotient_degree_factor;
     int num_gate_constraints;
+    int num_gates;
 };
 
 __device__ constexpr
@@ -979,6 +980,7 @@ CommonData circuit_common_data() {
         .num_routed_wires = 80,
         .quotient_degree_factor = 8,
         .num_gate_constraints = 123,
+        .num_gates = 5
     };
 }
 

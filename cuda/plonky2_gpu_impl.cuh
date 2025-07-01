@@ -371,6 +371,7 @@ void compute_quotient_values_kernel(
     constexpr CommonData common_data = circuit_common_data();
     constexpr int num_challenges = common_data.num_challenges;
     constexpr int num_gate_constraints = common_data.num_gate_constraints;
+    constexpr int num_gates = common_data.num_gates;
     SelectorsInfo selectors_info = circuit_selectors_info();
     assert(num_gate_constraints == _num_gate_constraints);
     assert(num_challenges == _num_challenges);
@@ -434,7 +435,6 @@ void compute_quotient_values_kernel(
                 FUNC func;
                 int num_constraints;
             };
-            constexpr const int num_gates = 25;
             GateFUNC gate_objs[num_gates];
 
 #define DECL_GATE_NAME(TYPE, NAME, INDEX) \
