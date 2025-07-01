@@ -495,7 +495,7 @@ void compute_quotient_values_kernel(
             DECL_GATE_NAME(PoseidonGate,PoseidonGate_ins, 4);
 
             GoldilocksField terms[num_gate_constraints];
-            auto evaluate_gate_constraints_base_batch = [index, public_inputs_hash, &constraint_terms_batch, &terms, gate_objs, selectors_info, local_constants, local_wires]() {
+            auto evaluate_gate_constraints_base_batch = [index, public_inputs_hash, &constraint_terms_batch, &terms, gate_objs, local_constants, local_wires]() {
                 SelectorsInfo selectors_info = circuit_selectors_info();
 
                 for (int row = 0; row < num_gates; ++row) {
