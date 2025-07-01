@@ -271,8 +271,8 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
 
     /// Create a Merkle proof from a leaf index.
     pub fn prove(&self, leaf_index: usize) -> MerkleProof<F, H> {
-        println!("cap len: {}", self.cap.len());
-        println!("leaves len: {} / {}", self.leaves.len(), self.leaves_len);
+        // println!("cap len: {}", self.cap.len());
+        // println!("leaves len: {} / {}", self.leaves.len(), self.leaves_len);
         let cap_height = log2_strict(self.cap.len());
 
         #[cfg(not(feature = "cuda"))]
@@ -284,7 +284,9 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
            let leaves_len = if self.leaves_len == 0 {
                 self.leaves.len()
             } else {
-                self.leaves_len
+                assert!(self.leaf_len > 0);
+                assert!(self.leaves_len % self.leaf_len == 0);
+                self.leaves_len / self.leaf_len
             };
             let digests = if self.digests_and_cap.is_empty() {
                 &self.digests
