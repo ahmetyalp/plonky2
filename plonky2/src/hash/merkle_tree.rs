@@ -272,7 +272,7 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
     /// Create a Merkle proof from a leaf index.
     pub fn prove(&self, leaf_index: usize) -> MerkleProof<F, H> {
         println!("cap len: {}", self.cap.len());
-        println!("leaves len: {}", self.leaves.len());
+        println!("leaves len: {} / {}", self.leaves.len(), self.leaves_len);
         let cap_height = log2_strict(self.cap.len());
 
         #[cfg(not(feature = "cuda"))]
