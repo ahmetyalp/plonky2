@@ -291,7 +291,7 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
             } else {
                 &self.digests_and_cap
             };
-            merkle_tree_prove::<F, H>(leaf_index, self.leaves.len(), cap_height, &self.digests)
+            merkle_tree_prove::<F, H>(leaf_index, leaves_len, cap_height, digests)
         };
 
         MerkleProof { siblings }
