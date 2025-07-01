@@ -284,14 +284,16 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
            let leaves_len = if self.leaves_len == 0 {
                 self.leaves.len()
             } else {
-                assert!(self.leaf_len > 0);
-                assert!(self.leaves_len % self.leaf_len == 0);
+                debug_assert!(self.leaf_len > 0);
+                debug_assert!(self.leaves_len % self.leaf_len == 0);
                 self.leaves_len / self.leaf_len
             };
             let digests = if self.digests_and_cap.is_empty() {
                 &self.digests
             } else {
-                &self.digests_and_cap
+                debug_assert!(self.digests_and_cap.len() >= self.cap.len());
+                let digests_len = self.digests_and_cap.len() - self.cap.len();
+                &self.digests_and_cap[..digests_len]
             };
             merkle_tree_prove::<F, H>(leaf_index, leaves_len, cap_height, digests)
         };
