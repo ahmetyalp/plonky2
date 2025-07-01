@@ -426,8 +426,6 @@ void compute_quotient_values_kernel(
         GoldilocksField constraint_terms_batch[num_gate_constraints] = {0};
         auto evaluate_gate_constraints_base_batch = [&]()
         {
-            SelectorsInfo selectors_info = circuit_selectors_info();
-
             struct BaseGate {};
             using FUNC = void (BaseGate::*)(EvaluationVarsBasePacked, StridedConstraintConsumer yield_constr);
 
@@ -498,6 +496,8 @@ void compute_quotient_values_kernel(
 
             GoldilocksField terms[num_gate_constraints];
             auto evaluate_gate_constraints_base_batch = [index, public_inputs_hash, &constraint_terms_batch, &terms, gate_objs, selectors_info, local_constants, local_wires]() {
+                SelectorsInfo selectors_info = circuit_selectors_info();
+
                 for (int row = 0; row < num_gates; ++row) {
                     int selector_index = selectors_info.selector_indices[row];
                     auto gate = gate_objs[row];
