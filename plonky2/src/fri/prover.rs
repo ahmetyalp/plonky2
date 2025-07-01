@@ -2,14 +2,13 @@
 use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-
 #[cfg(feature = "cuda")]
 use std::intrinsics::transmute;
-#[cfg(feature = "cuda")]
-use rustacuda::memory::{AsyncCopyDestination, DeviceSlice};
 
 use plonky2_field::types::Field;
 use plonky2_maybe_rayon::*;
+#[cfg(feature = "cuda")]
+use rustacuda::memory::{AsyncCopyDestination, DeviceSlice};
 
 use crate::field::extension::{flatten, unflatten, Extendable};
 use crate::field::polynomial::{PolynomialCoeffs, PolynomialValues};
@@ -36,8 +35,7 @@ pub fn fri_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const
     fri_params: &FriParams,
     final_poly_coeff_len: Option<usize>,
     max_num_query_steps: Option<usize>,
-    #[cfg(feature = "cuda")]
-    ctx: &mut Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
+    #[cfg(feature = "cuda")] ctx: &mut Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
     timing: &mut TimingTree,
 ) -> FriProof<F, C::Hasher, D> {
     let n = lde_polynomial_values.len();
@@ -65,12 +63,15 @@ pub fn fri_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const
     );
 
     // Query phase
-    let query_round_proofs =
-        fri_prover_query_rounds::<F, C, D>(
-            initial_merkle_trees, &trees, challenger, n, fri_params,
-            #[cfg(feature = "cuda")]
-            ctx,
-        );
+    let query_round_proofs = fri_prover_query_rounds::<F, C, D>(
+        initial_merkle_trees,
+        &trees,
+        challenger,
+        n,
+        fri_params,
+        #[cfg(feature = "cuda")]
+        ctx,
+    );
 
     FriProof {
         commit_phase_merkle_caps: trees.iter().map(|t| t.cap.clone()).collect(),
@@ -222,21 +223,30 @@ fn fri_prover_query_rounds<
     challenger: &mut Challenger<F, C::Hasher>,
     n: usize,
     fri_params: &FriParams,
-    #[cfg(feature = "cuda")]
-    ctx: &mut Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
+    #[cfg(feature = "cuda")] ctx: &mut Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
 ) -> Vec<FriQueryRound<F, C::Hasher, D>> {
-    challenger
+    #[cfg(feature = "cuda")]
+    let iter = challenger
         .get_n_challenges(fri_params.config.num_query_rounds)
-        .into_par_iter()
-        .map(|rand| {
-            let x_index = rand.to_canonical_u64() as usize % n;
-            fri_prover_query_round::<F, C, D>(
-                initial_merkle_trees, trees, x_index, fri_params,
-                #[cfg(feature = "cuda")]
-                ctx,
-            )
-        })
-        .collect()
+        .into_iter(); // TODO: @ahmetyalp CudaInvContext does not support parallel iterators yet.
+
+    #[cfg(not(feature = "cuda"))]
+    let iter = challenger
+        .get_n_challenges(fri_params.config.num_query_rounds)
+        .into_par_iter();
+
+    iter.map(|rand| {
+        let x_index = rand.to_canonical_u64() as usize % n;
+        fri_prover_query_round::<F, C, D>(
+            initial_merkle_trees,
+            trees,
+            x_index,
+            fri_params,
+            #[cfg(feature = "cuda")]
+            ctx,
+        )
+    })
+    .collect()
 }
 
 fn fri_prover_query_round<
@@ -248,8 +258,7 @@ fn fri_prover_query_round<
     trees: &[MerkleTree<F, C::Hasher>],
     mut x_index: usize,
     fri_params: &FriParams,
-    #[cfg(feature = "cuda")]
-    ctx: &mut Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
+    #[cfg(feature = "cuda")] ctx: &mut Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
 ) -> FriQueryRound<F, C::Hasher, D> {
     let mut query_steps = Vec::new();
     let initial_proof = initial_merkle_trees
