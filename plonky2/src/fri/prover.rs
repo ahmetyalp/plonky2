@@ -3,6 +3,11 @@ use alloc::vec;
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
+#[cfg(feature = "cuda")]
+use std::intrinsics::transmute;
+#[cfg(feature = "cuda")]
+use rustacuda::memory::{AsyncCopyDestination, DeviceSlice};
+
 use plonky2_field::types::Field;
 use plonky2_maybe_rayon::*;
 
