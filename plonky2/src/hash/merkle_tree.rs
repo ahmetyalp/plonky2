@@ -11,9 +11,6 @@ use crate::hash::merkle_proofs::MerkleProof;
 use crate::plonk::config::{GenericHashOut, Hasher};
 use crate::util::log2_strict;
 
-#[cfg(feature = "cuda")]
-use std::sync::Arc;
-
 /// The Merkle cap of height `h` of a Merkle tree is the `h`-th layer (from the root) of the tree.
 /// It can be used in place of the root to verify Merkle paths, which are `h` elements shorter.
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -62,17 +59,6 @@ pub struct MerkleTree<F: RichField, H: Hasher<F>> {
 
     /// The Merkle cap.
     pub cap: MerkleCap<F, H>,
-
-    #[cfg(feature = "cuda")]
-    pub leaf_len: usize,
-    #[cfg(feature = "cuda")]
-    pub flatten_leaves: Arc<Vec<F>>,
-    #[cfg(feature = "cuda")]
-    pub leaves_len: usize,
-    #[cfg(feature = "cuda")]
-    pub device_offset: isize,
-    #[cfg(feature = "cuda")]
-    pub digests_and_cap: Arc<Vec<H::Hash>>,
 }
 
 impl<F: RichField, H: Hasher<F>> Default for MerkleTree<F, H> {
@@ -81,16 +67,6 @@ impl<F: RichField, H: Hasher<F>> Default for MerkleTree<F, H> {
             leaves: Vec::new(),
             digests: Vec::new(),
             cap: MerkleCap::default(),
-            #[cfg(feature = "cuda")]
-            leaf_len: 0,
-            #[cfg(feature = "cuda")]
-            flatten_leaves: Arc::new(Vec::new()),
-            #[cfg(feature = "cuda")]
-            leaves_len: 0,
-            #[cfg(feature = "cuda")]
-            device_offset: -1,
-            #[cfg(feature = "cuda")]
-            digests_and_cap: Arc::new(Vec::new()),
         }
     }
 }
@@ -244,53 +220,19 @@ impl<F: RichField, H: Hasher<F>> MerkleTree<F, H> {
             leaves,
             digests,
             cap: MerkleCap(cap),
-            #[cfg(feature = "cuda")]
-            leaf_len: 0,
-            #[cfg(feature = "cuda")]
-            flatten_leaves: Arc::new(Vec::new()),
-            #[cfg(feature = "cuda")]
-            leaves_len: 0,
-            #[cfg(feature = "cuda")]
-            device_offset: -1,
-            #[cfg(feature = "cuda")]
-            digests_and_cap: Arc::new(Vec::new()),
         }
     }
 
     pub fn get(&self, i: usize) -> &[F] {
-        #[cfg(not(feature = "cuda"))]
         return &self.leaves[i];
-
-        #[cfg(feature = "cuda")]
-        if self.flatten_leaves.is_empty() {
-            &self.leaves[i]
-        } else {
-            &self.flatten_leaves[i * self.leaf_len.. (i+1) * self.leaf_len]
-        }
     }
 
     /// Create a Merkle proof from a leaf index.
     pub fn prove(&self, leaf_index: usize) -> MerkleProof<F, H> {
         let cap_height = log2_strict(self.cap.len());
 
-        #[cfg(not(feature = "cuda"))]
         let siblings =
             merkle_tree_prove::<F, H>(leaf_index, self.leaves.len(), cap_height, &self.digests);
-
-        #[cfg(feature = "cuda")]
-        let siblings = {
-           let leaves_len = if self.leaves_len == 0 {
-                self.leaves.len()
-            } else {
-                self.leaves_len
-            };
-            let digests = if self.digests_and_cap.is_empty() {
-                &self.digests
-            } else {
-                &self.digests_and_cap
-            };
-            merkle_tree_prove::<F, H>(leaf_index, self.leaves.len(), cap_height, &self.digests)
-        };
 
         MerkleProof { siblings }
     }
