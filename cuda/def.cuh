@@ -990,7 +990,7 @@ SelectorsInfo circuit_selectors_info() {
             0, 0, 0, 0, 1
     };
 
-    constexpr  int num_selectors = 2;
+    constexpr int num_selectors = 2;
     Range<int> groups[num_selectors] = {
             Range<int>{0,4},
             Range<int>{4,5}

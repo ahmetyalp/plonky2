@@ -498,7 +498,7 @@ void compute_quotient_values_kernel(
             auto evaluate_gate_constraints_base_batch = [index, public_inputs_hash, &constraint_terms_batch, &terms, gate_objs, local_constants, local_wires]() {
                 SelectorsInfo selectors_info = circuit_selectors_info();
 
-                for (int i = 0; i < selectors_info.groups.len; ++i) {
+                for (int i = 0; i < selectors_info.num_selectors; ++i) {
                     printf("Group %d: (%d, %d)\n", i, selectors_info.groups[i].first, selectors_info.groups[i].second);
                 }
 
