@@ -509,10 +509,6 @@ void compute_quotient_values_kernel(
 
             GoldilocksField terms[num_gate_constraints];
             auto evaluate_gate_constraints_base_batch = [index, public_inputs_hash, &constraint_terms_batch, &terms, gate_objs, selectors_info, local_constants, local_wires]() {
-                for (int i = 0; i < selectors_info.num_selectors; ++i) {
-                    printf("Group %d: (%d, %d)\n", i, selectors_info.groups[i].first, selectors_info.groups[i].second);
-                }
-
                 for (int row = 0; row < num_gates; ++row) {
                     int selector_index = selectors_info.selector_indices[row];
                     auto gate = gate_objs[row];

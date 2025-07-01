@@ -326,6 +326,11 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
             lde_final_poly.coset_fft(F::coset_shift().into())
         );
 
+        oracles
+                .iter()
+                .map(|c| &c.merkle_tree)
+                .for_each(|tree| println!("Merkle tree cap: {}", tree.cap.0.len()));
+
         let fri_proof = fri_proof::<F, C, D>(
             &oracles
                 .par_iter()
