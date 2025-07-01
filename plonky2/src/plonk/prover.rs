@@ -715,7 +715,7 @@ where
             &common_data.fri_params,
             None,
             None,
-            ctx,
+            Some(ctx),
             timing,
         )
     );
