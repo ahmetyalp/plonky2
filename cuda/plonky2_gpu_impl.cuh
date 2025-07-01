@@ -519,6 +519,8 @@ void compute_quotient_values_kernel(
                         return res;
                     };
 
+                    printf("row: %d, selector_index: %d, num_selectors: %d\n", row, selector_index, selectors_info.num_selectors);
+
                     auto filter = compute_filter(
                             row,
                             selectors_info.groups[selector_index],
