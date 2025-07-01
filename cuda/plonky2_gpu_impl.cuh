@@ -498,12 +498,15 @@ void compute_quotient_values_kernel(
             auto evaluate_gate_constraints_base_batch = [index, public_inputs_hash, &constraint_terms_batch, &terms, gate_objs, local_constants, local_wires]() {
                 SelectorsInfo selectors_info = circuit_selectors_info();
 
+                for (int i = 0; i < selectors_info.groups.len; ++i) {
+                    printf("Group %d: (%d, %d)\n", i, selectors_info.groups[i].first, selectors_info.groups[i].second);
+                }
+
                 for (int row = 0; row < num_gates; ++row) {
                     int selector_index = selectors_info.selector_indices[row];
                     auto gate = gate_objs[row];
 
-                    auto compute_filter = [](int row, Range<int> group_range, GoldilocksField s,
-                                             bool many_selector) -> GoldilocksField {
+                    auto compute_filter = [](int row, Range<int> group_range, GoldilocksField s, bool many_selector) -> GoldilocksField {
                         if (!group_range.contains(row)) {
                             printf("Error: row %d not in group_range (%d, %d)\n", row, group_range.first, group_range.second);
                         }
