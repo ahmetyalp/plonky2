@@ -504,7 +504,11 @@ void compute_quotient_values_kernel(
 
                     auto compute_filter = [](int row, Range<int> group_range, GoldilocksField s,
                                              bool many_selector) -> GoldilocksField {
+                        if (!group_range.contains(row)) {
+                            printf("Error: row %d not in group_range (%d, %d)\n", row, group_range.first, group_range.second);
+                        }
                         assert(group_range.contains(row));
+
                         GoldilocksField res = {1};
                         for (int i = group_range.first; i < group_range.second; ++i) {
                             if (i == row)
