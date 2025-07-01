@@ -371,7 +371,7 @@ void compute_quotient_values_kernel(
     constexpr CommonData common_data = circuit_common_data();
     constexpr int num_challenges = common_data.num_challenges;
     constexpr int num_gate_constraints = common_data.num_gate_constraints;
-    constexpr int num_gates = common_data.num_gates;
+    constexpr const int num_gates = common_data.num_gates;
     SelectorsInfo selectors_info = circuit_selectors_info();
     assert(num_gate_constraints == _num_gate_constraints);
     assert(num_challenges == _num_challenges);
@@ -503,7 +503,6 @@ void compute_quotient_values_kernel(
 
                     auto compute_filter = [](int row, Range<int> group_range, GoldilocksField s,
                                              bool many_selector) -> GoldilocksField {
-                        printf("compute_filter: row: %d, group_range: (%d, %d)\n", row, group_range.first, group_range.second);
                         assert(group_range.contains(row));
                         GoldilocksField res = {1};
                         for (int i = group_range.first; i < group_range.second; ++i) {

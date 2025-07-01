@@ -998,7 +998,7 @@ SelectorsInfo circuit_selectors_info() {
     SelectorsInfo selectors_info = {
             .selector_indices = selector_indices,
             .groups = groups,
-            .num_selectors = num_selectors
+            .num_selectors = num_selectors,
     };
 
     return selectors_info;
