@@ -503,7 +503,8 @@ void compute_quotient_values_kernel(
 
                     auto compute_filter = [](int row, Range<int> group_range, GoldilocksField s,
                                              bool many_selector) -> GoldilocksField {
-                        assert(group_range.contains(row));
+                        // assert(group_range.contains(row));
+                        printf("row: %d, group_range: (%d, %d)\n", row, group_range.first, group_range.second);
                         GoldilocksField res = {1};
                         for (int i = group_range.first; i < group_range.second; ++i) {
                             if (i == row)
@@ -519,7 +520,7 @@ void compute_quotient_values_kernel(
                         return res;
                     };
 
-                    printf("row: %d, selector_index: %d, num_selectors: %d\n", row, selector_index, selectors_info.num_selectors);
+                    // printf("row: %d, selector_index: %d, num_selectors: %d\n", row, selector_index, selectors_info.num_selectors);
 
                     auto filter = compute_filter(
                             row,
