@@ -984,7 +984,7 @@ CommonData circuit_common_data() {
 
 __device__ inline
 SelectorsInfo circuit_selectors_info() {
-    int selector_indices[25] = {
+    int selector_indices[5] = {
             0, 0, 0, 0, 1
     };
 

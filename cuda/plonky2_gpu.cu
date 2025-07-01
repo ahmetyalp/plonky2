@@ -620,8 +620,8 @@ extern "C" {
                 d_outs,
                 public_inputs_hash,
 
-                constants_sigmas_commitment_leaves->ptr,     constants_sigmas_commitment_leaves->len,
-                zs_partial_products_commitment_leaves->ptr,  zs_partial_products_commitment_leaves->len,
+                constants_sigmas_commitment_leaves->ptr,     constants_sigmas_commitment_leaves->len / values_num_per_extpoly,
+                zs_partial_products_commitment_leaves->ptr,  zs_partial_products_commitment_leaves->len / values_num_per_extpoly,
                 d_ext_values_flatten,                poly_num,
                 num_constants, num_routed_wires,
                 num_challenges,
