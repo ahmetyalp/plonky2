@@ -214,7 +214,7 @@ fn fri_prover_query_rounds<
 ) -> Vec<FriQueryRound<F, C::Hasher, D>> {
     challenger
         .get_n_challenges(fri_params.config.num_query_rounds)
-        .into_iter()
+        .into_par_iter()
         .map(|rand| {
             let x_index = rand.to_canonical_u64() as usize % n;
             fri_prover_query_round::<F, C, D>(initial_merkle_trees, trees, x_index, fri_params)
@@ -237,8 +237,6 @@ fn fri_prover_query_round<
         .iter()
         .map(|t| (t.get(x_index).to_vec(), t.prove(x_index)))
         .collect::<Vec<_>>();
-
-    println!("init done!");
     for (i, tree) in trees.iter().enumerate() {
         let arity_bits = fri_params.reduction_arity_bits[i];
         let evals = unflatten(tree.get(x_index >> arity_bits));
