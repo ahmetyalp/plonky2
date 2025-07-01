@@ -971,7 +971,7 @@ struct CommonData {
     int num_gates;
 };
 
-__global__ constexpr
+__device__ constexpr
 CommonData circuit_common_data() {
 
     return CommonData{
@@ -984,24 +984,16 @@ CommonData circuit_common_data() {
     };
 }
 
-__global__
+__constant__ int d_selector_indices[5] = {0, 0, 0, 0, 1};
+__constant__ Range<int> d_groups[2] = {{0, 4}, {4, 5}};
+
+__device__
 SelectorsInfo circuit_selectors_info() {
-    int selector_indices[5] = {
-            0, 0, 0, 0, 1
+    return SelectorsInfo{
+        .selector_indices = d_selector_indices,
+        .groups = d_groups,
+        .num_selectors = 2,
     };
-
-    constexpr int num_selectors = 2;
-    Range<int> groups[num_selectors] = {
-            Range<int>{0,4},
-            Range<int>{4,5}
-    };
-    SelectorsInfo selectors_info = {
-            .selector_indices = selector_indices,
-            .groups = groups,
-            .num_selectors = num_selectors,
-    };
-
-    return selectors_info;
 }
 
 #endif
