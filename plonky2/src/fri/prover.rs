@@ -235,7 +235,33 @@ fn fri_prover_query_round<
     let mut query_steps = Vec::new();
     let initial_proof = initial_merkle_trees
         .iter()
-        .map(|t| (t.get(x_index).to_vec(), t.prove(x_index)))
+        .map(|t| {
+            #[cfg(feature = "cuda")]
+            if t.device_offset >= 0 && ctx.is_some() {
+                let ctx = ctx.as_mut().unwrap();
+                let data = &mut (*ctx).cache_mem_device[t.device_offset as usize..];
+                let data = &mut data[x_index * t.leaf_len..(x_index + 1) * t.leaf_len];
+
+                let mut values = Vec::<F>::with_capacity(t.leaf_len);
+                unsafe {
+                    values.set_len(data.len());
+                    transmute::<&DeviceSlice<F>, &DeviceSlice<u64>>(data)
+                        .async_copy_to(
+                            transmute::<&mut Vec<F>, &mut Vec<u64>>(&mut values),
+                            &ctx.inner.stream,
+                        )
+                        .unwrap();
+                    ctx.inner.stream.synchronize().unwrap();
+                }
+                ctx.inner.stream.synchronize().unwrap();
+                (values, t.prove(x_index))
+            } else {
+                (t.get(x_index).to_vec(), t.prove(x_index))
+            }
+
+            #[cfg(not(feature = "cuda"))]
+            (t.get(x_index).to_vec(), t.prove(x_index))
+        })
         .collect::<Vec<_>>();
     for (i, tree) in trees.iter().enumerate() {
         let arity_bits = fri_params.reduction_arity_bits[i];
