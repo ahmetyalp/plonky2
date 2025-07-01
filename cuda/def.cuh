@@ -973,7 +973,6 @@ struct CommonData {
 
 __device__ constexpr
 CommonData circuit_common_data() {
-
     return CommonData{
         .num_constants = 8,
         .num_challenges = 2,
@@ -981,18 +980,6 @@ CommonData circuit_common_data() {
         .quotient_degree_factor = 8,
         .num_gate_constraints = 123,
         .num_gates = 5,
-    };
-}
-
-__constant__ int d_selector_indices[5] = {0, 0, 0, 0, 1};
-__constant__ Range<int> d_groups[2] = {{0, 4}, {4, 5}};
-
-__device__
-SelectorsInfo circuit_selectors_info() {
-    return SelectorsInfo{
-        .selector_indices = d_selector_indices,
-        .groups = d_groups,
-        .num_selectors = 2,
     };
 }
 

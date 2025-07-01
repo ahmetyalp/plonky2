@@ -426,6 +426,19 @@ void compute_quotient_values_kernel(
         GoldilocksField constraint_terms_batch[num_gate_constraints] = {0};
         auto evaluate_gate_constraints_base_batch = [&]()
         {
+            int selector_indices[5] = {0, 0, 0, 0, 1};
+
+            constexpr int num_selectors = 2;
+            Range<int> groups[num_selectors] = {
+                    Range<int>{0,4},
+                    Range<int>{4,5}
+            };
+            SelectorsInfo selectors_info = {
+                    .selector_indices = selector_indices,
+                    .groups = groups,
+                    .num_selectors = num_selectors
+            };
+
             struct BaseGate {};
             using FUNC = void (BaseGate::*)(EvaluationVarsBasePacked, StridedConstraintConsumer yield_constr);
 
@@ -495,9 +508,7 @@ void compute_quotient_values_kernel(
             DECL_GATE_NAME(PoseidonGate,PoseidonGate_ins, 4);
 
             GoldilocksField terms[num_gate_constraints];
-            auto evaluate_gate_constraints_base_batch = [index, public_inputs_hash, &constraint_terms_batch, &terms, gate_objs, local_constants, local_wires]() {
-                SelectorsInfo selectors_info = circuit_selectors_info();
-
+            auto evaluate_gate_constraints_base_batch = [index, public_inputs_hash, &constraint_terms_batch, &terms, gate_objs, selectors_info, local_constants, local_wires]() {
                 for (int i = 0; i < selectors_info.num_selectors; ++i) {
                     printf("Group %d: (%d, %d)\n", i, selectors_info.groups[i].first, selectors_info.groups[i].second);
                 }
