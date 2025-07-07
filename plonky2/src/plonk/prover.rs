@@ -549,6 +549,8 @@ where
     timed!(timing, "compute quotient polys", {
         let num_wires = common_data.config.num_wires;
         let log_degree = log2_strict(degree);
+        let n_inv = F::inverse_2exp(log_degree);
+        let n_inv_ptr: *const F = &n_inv;
         let values_flatten_len = num_wires * degree;
 
         let rate_bits = config.fri_config.rate_bits;
@@ -685,6 +687,7 @@ where
                 &gammas_device,
                 common_data.num_gate_constraints as i32,
                 common_data.num_partial_products as i32,
+                n_inv_ptr as *const u64,
                 ctx_ptr as *mut core::ffi::c_void,
             )
         });

@@ -146,6 +146,8 @@ extern "C" {
         num_gate_constraints: i32,
         num_partial_products: i32,
 
+        n_inv: *const u64,
+
         ctx: *mut c_void,
     ) -> cuda::Error;
 

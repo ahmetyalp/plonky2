@@ -38,35 +38,11 @@ do {\
     }\
 } while(0)
 
-//static std::mutex mtx;  // 互斥锁
-//bool has_init = false;
-//cudaStream_t stream;
 
-//extern "C" RustError init();
-
-//void try_init() {
-//    std::lock_guard<std::mutex> lock(mtx);  // 加锁
-//    if (has_init)
-//        return ;
-//    init();
-//}
-//
 #include <fstream>
 #include <vector>
 
 extern "C" {
-
-//    RustError init()
-//    {
-////        printf("in init\n");
-//        has_init = true;
-//        cudaSetDevice(0);
-//        cudaDeviceReset();
-//        cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
-//        return RustError{cudaSuccess};
-//    }
-
-
     RustError ifft(
             GoldilocksField* d_values_flatten,
             int poly_num, int values_num_per_poly, int log_len,
@@ -245,47 +221,12 @@ extern "C" {
 
         d_ext_values_flatten += pad_extvalues_len;
 
-
-
-
-//        if (poly_num == 20) {
-//            std::vector<GoldilocksField> values_flatten(values_num_per_poly*poly_num);
-//            CUDA_ASSERT(cudaMemcpyAsync(&values_flatten[0], d_values_flatten,  values_num_per_poly*poly_num*sizeof(GoldilocksField),
-//                                        cudaMemcpyDeviceToHost, stream));
-//            cudaStreamSynchronize(stream);
-//
-//            std::ofstream file("zs_partial_products-gpu.bin", std::ios::binary);
-//            if (file.is_open()) {
-//                file.write(reinterpret_cast<const char*>(values_flatten.data()), values_flatten.size() * sizeof(uint64_t));
-//                file.close();
-//                std::cout << "Data written to file." << std::endl;
-//            } else {
-//                std::cerr << "Failed to open file." << std::endl;
-//            }
-//        }
-
         clock_t start = clock();
 //        cudaMemsetAsync(d_ext_values_flatten, 8*values_num_per_poly*poly_num*(1<<rate_bits), 0, ctx->stream2);
         ifft_kernel<<<poly_num, 32*8, 0, stream>>>(d_values_flatten, poly_num, values_num_per_poly, log_len, d_root_table, n_inv);
         cudaStreamSynchronize(stream);
 //        cudaStreamSynchronize(ctx->stream2);
         printf("ifft_kernel elapsed: %.2lf\n", ifft_kernel_use=(double )(clock()-start) / CLOCKS_PER_SEC * 1000);
-
-//        if (poly_num == 20) {
-//            std::vector<GoldilocksField> values_flatten(values_num_per_poly*poly_num);
-//            CUDA_ASSERT(cudaMemcpyAsync(&values_flatten[0], d_values_flatten,  values_num_per_poly*poly_num*sizeof(GoldilocksField),
-//                                        cudaMemcpyDeviceToHost, stream));
-//            cudaStreamSynchronize(stream);
-//
-//            std::ofstream file("values_flatten-gpu.bin", std::ios::binary);
-//            if (file.is_open()) {
-//                file.write(reinterpret_cast<const char*>(values_flatten.data()), values_flatten.size() * sizeof(uint64_t));
-//                file.close();
-//                std::cout << "Data written to file." << std::endl;
-//            } else {
-//                std::cerr << "Failed to open file." << std::endl;
-//            }
-//        }
 
         start = clock();
         thcnt = values_num_per_poly*poly_num;
@@ -308,45 +249,10 @@ extern "C" {
         cudaStreamSynchronize(stream);
         printf("mul_shift_kernel elapsed: %.2lf\n", mul_shift_kernel_use=(double )(clock()-start) / CLOCKS_PER_SEC * 1000);
 
-//        if (poly_num == 20)
-//        {
-//            std::vector<GoldilocksField> data(values_num_per_poly+100);
-//            CUDA_ASSERT(cudaMemcpyAsync(&data[0], d_ext_values_flatten,  data.size()*sizeof(GoldilocksField),
-//                                        cudaMemcpyDeviceToHost, stream));
-//            cudaStreamSynchronize(stream);
-//            for (int i = 0; i < data.size(); ++i) {
-//                if (i < values_num_per_poly)
-//                    printf("first i: %d, val:%016lX\n", i, data[i].data);
-//                else
-//                    printf("second i: %d, val:%016lX\n", i, data[i].data);
-//            }
-//
-//        }
-//
-
         start = clock();
         fft_kernel<<<poly_num, 32*8, 0, stream>>>(d_ext_values_flatten, poly_num, values_num_per_poly*(1<<rate_bits), log_len+rate_bits, d_root_table2, rate_bits);
         cudaStreamSynchronize(stream);
         printf("fft_kernel elapsed: %.2lf\n", fft_kernel_use=(double )(clock()-start) / CLOCKS_PER_SEC * 1000);
-
-
-//        if (poly_num == 20)
-//        {
-//            std::vector<GoldilocksField> outs(values_num_per_extpoly*poly_num);
-//            CUDA_ASSERT(cudaMemcpyAsync(&outs[0], d_ext_values_flatten,  outs.size()*sizeof(GoldilocksField),
-//                                        cudaMemcpyDeviceToHost, stream));
-//            cudaStreamSynchronize(stream);
-//
-//            std::ofstream file("fft_kernel-gpu.bin", std::ios::binary);
-//            if (file.is_open()) {
-//                file.write(reinterpret_cast<const char*>(outs.data()), outs.size() * sizeof(uint64_t));
-//                file.close();
-//                std::cout << "Data written to file." << std::endl;
-//            } else {
-//                std::cerr << "Failed to open file." << std::endl;
-//            }
-//
-//        }
 
         start = clock();
         thcnt = values_num_per_extpoly*poly_num;
@@ -408,26 +314,6 @@ extern "C" {
                 hash_leaves_kernel_use+
                 reduce_digests_kernel_use+
                 transpose_kernel_use;
-
-
-//        if (poly_num == 20)
-//        {
-//            std::vector<GoldilocksField> outs(values_num_per_extpoly*poly_num);
-//            CUDA_ASSERT(cudaMemcpyAsync(&outs[0], d_ext_values_flatten - pad_extvalues_len,  outs.size()*sizeof(GoldilocksField),
-//                                        cudaMemcpyDeviceToHost, stream));
-//            cudaStreamSynchronize(stream);
-//
-//            std::ofstream file("partial_products-gpu.bin", std::ios::binary);
-//            if (file.is_open()) {
-//                file.write(reinterpret_cast<const char*>(outs.data()), outs.size() * sizeof(uint64_t));
-//                file.close();
-//                std::cout << "Data written to file." << std::endl;
-//            } else {
-//                std::cerr << "Failed to open file." << std::endl;
-//            }
-//
-//        }
-//
         printf("total use:%.2lf\n", total_use);
         return RustError{cudaSuccess};
     }
@@ -564,6 +450,8 @@ extern "C" {
             int num_gate_constraints,
             int num_partial_products,
 
+            GoldilocksField* p_inv,
+
             CudaInvContext* ctx
     ) {
 
@@ -648,8 +536,9 @@ extern "C" {
         printf("transpose_kernel elapsed: %.2lf\n", (double )(clock()-start) / CLOCKS_PER_SEC * 1000);
 
         start = clock();
-        GoldilocksField n_inv_ext = {.data = 0xfffff7ff00000801ULL};
-        ifft_kernel<<<num_challenges, 32*8, 0, stream>>>(d_quotient_polys, num_challenges, values_num_per_extpoly, log_len+rate_bits, d_root_table2, n_inv_ext);
+        // GoldilocksField n_inv_ext = {.data = 0xfffff7ff00000801ULL};
+        GoldilocksField n_inv = *p_inv;
+        ifft_kernel<<<num_challenges, 32*8, 0, stream>>>(d_quotient_polys, num_challenges, values_num_per_extpoly, log_len+rate_bits, d_root_table2, n_inv);
         cudaStreamSynchronize(stream);
         printf("ifft_kernel elapsed: %.2lf\n", (double )(clock()-start) / CLOCKS_PER_SEC * 1000);
 
@@ -668,22 +557,6 @@ extern "C" {
         cudaStreamSynchronize(stream);
         printf("mul_kernel elapsed: %.2lf\n", (double )(clock()-start) / CLOCKS_PER_SEC * 1000);
 
-//        {
-//            std::vector<GoldilocksField> outs(num_challenges*values_num_per_extpoly);
-//            CUDA_ASSERT(cudaMemcpyAsync(&outs[0], d_quotient_polys,  outs.size()*sizeof(GoldilocksField), cudaMemcpyDeviceToHost, stream));
-//            cudaStreamSynchronize(stream);
-//
-//            std::ofstream file("quotient_values2.bin", std::ios::binary);
-//            if (file.is_open()) {
-//                file.write(reinterpret_cast<const char*>(outs.data()), outs.size() * sizeof(GoldilocksField));
-//                file.close();
-//                std::cout << "Data written to file." << std::endl;
-//            } else {
-//                std::cerr << "Failed to open file." << std::endl;
-//            }
-//
-////        printf("v1: %lx, v2: %lx\n", outs[2086137].data, outs[2086137 + values_num_per_extpoly].data);
-//        }
         return RustError{cudaSuccess};
     }
 
