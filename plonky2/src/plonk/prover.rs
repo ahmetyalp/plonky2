@@ -4,16 +4,34 @@
 use alloc::{format, vec, vec::Vec};
 use core::cmp::min;
 use core::mem::swap;
+#[cfg(feature = "cuda")]
+use std::ffi::c_void;
+#[cfg(feature = "cuda")]
+use std::mem::transmute;
 
 use anyhow::{ensure, Result};
 use hashbrown::HashMap;
+#[cfg(feature = "cuda")]
+use plonky2_cuda;
+#[cfg(feature = "cuda")]
+use plonky2_cuda::DataSlice;
 use plonky2_maybe_rayon::*;
+#[cfg(feature = "cuda")]
+use plonky2_util::log2_strict;
+#[cfg(feature = "cuda")]
+use rustacuda::memory::AsyncCopyDestination;
+#[cfg(feature = "cuda")]
+use rustacuda::memory::DeviceSlice;
+#[cfg(feature = "cuda")]
+use rustacuda::prelude::CopyDestination;
 
 use super::circuit_builder::{LookupChallenges, LookupWire};
 use crate::field::extension::Extendable;
 use crate::field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use crate::field::types::Field;
 use crate::field::zero_poly_coset::ZeroPolyOnCoset;
+#[cfg(feature = "cuda")]
+use crate::fri::oracle::CudaInnerContext;
 use crate::fri::oracle::PolynomialBatch;
 use crate::gates::lookup::LookupGate;
 use crate::gates::lookup_table::LookupTableGate;
@@ -34,25 +52,6 @@ use crate::timed;
 use crate::util::partial_products::{partial_products_and_z_gx, quotient_chunk_products};
 use crate::util::timing::TimingTree;
 use crate::util::{log2_ceil, transpose};
-
-#[cfg(feature = "cuda")]
-use std::ffi::c_void;
-#[cfg(feature = "cuda")]
-use crate::fri::oracle::CudaInnerContext;
-#[cfg(feature = "cuda")]
-use plonky2_cuda;
-#[cfg(feature = "cuda")]
-use plonky2_cuda::DataSlice;
-#[cfg(feature = "cuda")]
-use rustacuda::memory::DeviceSlice;
-#[cfg(feature = "cuda")]
-use rustacuda::prelude::CopyDestination;
-#[cfg(feature = "cuda")]
-use rustacuda::memory::AsyncCopyDestination;
-#[cfg(feature = "cuda")]
-use plonky2_util::log2_strict;
-#[cfg(feature = "cuda")]
-use std::mem::transmute;
 
 /// Set all the lookup gate wires (including multiplicities) and pad unused LU slots.
 /// Warning: rows are in descending order: the first gate to appear is the last LU gate, and
@@ -134,8 +133,7 @@ pub fn prove<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: 
     common_data: &CommonCircuitData<F, D>,
     inputs: PartialWitness<F>,
     timing: &mut TimingTree,
-    #[cfg(feature = "cuda")]
-    ctx: Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
+    #[cfg(feature = "cuda")] ctx: &mut crate::fri::oracle::CudaInvContext<F, C, D>,
 ) -> Result<ProofWithPublicInputs<F, C, D>>
 where
     C::Hasher: Hasher<F>,
@@ -152,7 +150,7 @@ where
         common_data,
         partition_witness,
         #[cfg(feature = "cuda")]
-        ctx.expect("CUDA context is required for CUDA prover"),
+        ctx,
         timing,
     )
 }
@@ -269,7 +267,11 @@ where
         zs_partial_products
     };
 
-    println!("length of zs_partial_products_lookups: {}, {}", zs_partial_products_lookups.len(), zs_partial_products_lookups[0].len());
+    println!(
+        "length of zs_partial_products_lookups: {}, {}",
+        zs_partial_products_lookups.len(),
+        zs_partial_products_lookups[0].len()
+    );
 
     let partial_products_zs_and_lookup_commitment = timed!(
         timing,
@@ -409,7 +411,7 @@ where
     C::InnerHasher: Hasher<F>,
 {
     let has_lookup = !common_data.luts.is_empty();
-        if has_lookup {
+    if has_lookup {
         panic!("Lookup is not supported in CUDA prover yet.");
     }
 
@@ -430,7 +432,8 @@ where
     );
 
     let wires_values = &witness.flatten_wire_values;
-    assert!(wires_values.len() % degree == 0,
+    assert!(
+        wires_values.len() % degree == 0,
         "The number of wires values should be divisible by the degree."
     );
 
@@ -508,15 +511,22 @@ where
     // } else {
     //     zs_partial_products
     // };
+    // Assume no lookup for now!
     let zs_partial_products_lookups = zs_partial_products;
 
-    let zs_partial_products_lookups = &zs_partial_products_lookups.iter().flat_map(|p|p.values.to_vec()).collect::<Vec<_>>();
+    let zs_partial_products_lookups = &zs_partial_products_lookups
+        .iter()
+        .flat_map(|p| p.values.to_vec())
+        .collect::<Vec<_>>();
+
+    println!("second stage num_wires: {}", zs_partial_products_lookups.len() / degree);
+
     let partial_products_zs_and_lookup_commitment = timed!(
         timing,
         "commit to partial products and Z's and, if any, lookup polynomials",
         PolynomialBatch::from_values_with_gpu(
             zs_partial_products_lookups,
-            zs_partial_products_lookups.len()/degree,
+            zs_partial_products_lookups.len() / degree,
             degree,
             config.fri_config.rate_bits,
             config.zero_knowledge && PlonkOracle::ZS_PARTIAL_PRODUCTS.blinding,
@@ -533,126 +543,149 @@ where
 
     let alphas = challenger.get_n_challenges(num_challenges);
 
-    timed!(
-        timing,
-        "compute quotient polys",
-        {
-            let num_wires = common_data.config.num_wires;
-            let log_degree = log2_strict(degree);
-            let values_flatten_len = num_wires*degree;
+    timed!(timing, "compute quotient polys", {
+        let num_wires = common_data.config.num_wires;
+        let log_degree = log2_strict(degree);
+        let values_flatten_len = num_wires * degree;
 
-            let rate_bits = config.fri_config.rate_bits;
-            let blinding = config.zero_knowledge && PlonkOracle::WIRES.blinding;
-            let salt_size = if blinding { crate::fri::oracle::SALT_SIZE } else { 0 };
+        let rate_bits = config.fri_config.rate_bits;
+        let blinding = config.zero_knowledge && PlonkOracle::WIRES.blinding;
+        let salt_size = if blinding {
+            crate::fri::oracle::SALT_SIZE
+        } else {
+            0
+        };
 
-            let ext_values_flatten_len = (values_flatten_len+salt_size*degree) * (1<<rate_bits);
-            let pad_extvalues_len = ext_values_flatten_len;
-            let values_num_per_extpoly = degree*(1<<rate_bits);
+        let ext_values_flatten_len = (values_flatten_len + salt_size * degree) * (1 << rate_bits);
+        let pad_extvalues_len = ext_values_flatten_len;
+        let values_num_per_extpoly = degree * (1 << rate_bits);
 
-            let (ext_values_device, remained) = ctx.cache_mem_device.split_at_mut(ctx.second_stage_offset);
-            let root_table_device2 = &mut ctx.root_table_device2;
-            let shift_inv_powers_device = &mut ctx.shift_inv_powers_device;
+        let (ext_values_device, remained) =
+            ctx.cache_mem_device.split_at_mut(ctx.second_stage_offset);
+        let root_table_device2 = &mut ctx.root_table_device2;
+        let shift_inv_powers_device = &mut ctx.shift_inv_powers_device;
 
+        let (
+            partial_products_and_zs_commitment_leaves_device,
+            alphas_device,
+            betas_device,
+            gammas_device,
+            d_outs,
+            d_quotient_polys,
+        ) = timed!(timing, "copy params to gpu", {
+            let mut useCnt = zs_partial_products_lookups.len() << rate_bits;
+            let (data, remained) = remained.split_at_mut(useCnt);
 
-            let (partial_products_and_zs_commitment_leaves_device, alphas_device, betas_device, gammas_device,
-                d_outs, d_quotient_polys) = timed!(
-                timing,
-                "copy params to gpu",
-                {
-                    let mut useCnt = zs_partial_products_lookups.len() << rate_bits;
-                    let (data, remained) = remained.split_at_mut(useCnt);
-
-                    let partial_products_and_zs_commitment_leaves_device =
-                        DataSlice{ptr: data.as_ptr() as *const c_void, len: useCnt as i32 };
-
-                    useCnt = values_num_per_extpoly*2;
-                    let (d_quotient_polys, remained) = remained.split_at_mut(useCnt);
-
-                    useCnt = values_num_per_extpoly*2;
-                    let (d_outs, remained) = remained.split_at_mut(useCnt);
-
-                    useCnt = num_challenges;
-                    let (d_alphas, remained) = remained.split_at_mut(useCnt);
-                    unsafe {
-                        transmute::<&mut DeviceSlice<F>, &mut DeviceSlice<u64>>(d_alphas).async_copy_from(
-                            transmute::<&Vec<F>, &Vec<u64>>(&alphas),
-                            &ctx.inner.stream
-                        ).unwrap();
-                    }
-                    let alphas_device = DataSlice{ptr: d_alphas.as_ptr() as *const c_void, len: alphas.len() as i32 };
-
-                    let (d_betas, remained) = remained.split_at_mut(useCnt);
-                    unsafe {
-                        transmute::<&mut DeviceSlice<F>, &mut DeviceSlice<u64>>(d_betas).async_copy_from(
-                            transmute::<&Vec<F>, &Vec<u64>>(&betas),
-                            &ctx.inner.stream
-                        ).unwrap();
-                    }
-                    let betas_device = DataSlice{ptr: d_betas.as_ptr() as *const c_void, len: betas.len() as i32 };
-
-                    let (d_gammas, remained) = remained.split_at_mut(useCnt);
-                    unsafe {
-                        transmute::<&mut DeviceSlice<F>, &mut DeviceSlice<u64>>(d_gammas).async_copy_from(
-                            transmute::<&Vec<F>, &Vec<u64>>(&gammas),
-                            &ctx.inner.stream
-                        ).unwrap();
-                    }
-                    let gammas_device = DataSlice{ptr: d_gammas.as_ptr() as *const c_void, len: gammas.len() as i32 };
-
-                    ctx.inner.stream.synchronize().unwrap();
-
-                    (partial_products_and_zs_commitment_leaves_device, alphas_device, betas_device, gammas_device, d_outs, d_quotient_polys)
-                }
-            );
-
-            let points_device = DataSlice{ptr: ctx.points_device.as_ptr() as *const c_void, len: ctx.points_device.len() as i32 };
-            let z_h_on_coset_evals_device = DataSlice{ptr: ctx.z_h_on_coset_evals_device.as_ptr() as *const c_void, len: ctx.z_h_on_coset_evals_device.len() as i32 };
-            let z_h_on_coset_inverses_device = DataSlice{ptr: ctx.z_h_on_coset_inverses_device.as_ptr() as *const c_void, len: ctx.z_h_on_coset_inverses_device.len() as i32 };
-            let k_is_device = DataSlice{ptr: ctx.k_is_device.as_ptr() as *const c_void, len: ctx.k_is_device.len() as i32 };
-
-            let constants_sigmas_commitment_leaves_device = DataSlice{
-                ptr: ctx.constants_sigmas_commitment_leaves_device.as_ptr() as *const c_void,
-                len: ctx.constants_sigmas_commitment_leaves_device.len() as i32,
+            let partial_products_and_zs_commitment_leaves_device = DataSlice {
+                ptr: data.as_ptr() as *const c_void,
+                len: useCnt as i32,
             };
-            let ctx_ptr :*mut CudaInnerContext = &mut ctx.inner;
-            timed!(
-                timing,
-                "compute quotient polys with GPU",
-                unsafe {
-                    plonky2_cuda::compute_quotient_polys(
-                        ext_values_device.as_ptr() as *const u64,
 
-                        num_wires as i32,
-                        degree as i32,
-                        log_degree as i32,
-                        root_table_device2.as_ptr() as *const u64,
-                        shift_inv_powers_device.as_ptr() as *const u64,
-                        rate_bits as i32,
-                        salt_size as i32,
+            useCnt = values_num_per_extpoly * 2;
+            let (d_quotient_polys, remained) = remained.split_at_mut(useCnt);
 
-                        &partial_products_and_zs_commitment_leaves_device,
-                        &constants_sigmas_commitment_leaves_device,
+            useCnt = values_num_per_extpoly * 2;
+            let (d_outs, remained) = remained.split_at_mut(useCnt);
 
-                        d_outs.as_mut_ptr() as *mut c_void,
-                        d_quotient_polys.as_mut_ptr() as *mut c_void,
+            useCnt = num_challenges;
+            let (d_alphas, remained) = remained.split_at_mut(useCnt);
+            unsafe {
+                transmute::<&mut DeviceSlice<F>, &mut DeviceSlice<u64>>(d_alphas)
+                    .async_copy_from(transmute::<&Vec<F>, &Vec<u64>>(&alphas), &ctx.inner.stream)
+                    .unwrap();
+            }
+            let alphas_device = DataSlice {
+                ptr: d_alphas.as_ptr() as *const c_void,
+                len: alphas.len() as i32,
+            };
 
-                        &points_device,
-                        &z_h_on_coset_evals_device,
-                        &z_h_on_coset_inverses_device,
-                        &k_is_device,
+            let (d_betas, remained) = remained.split_at_mut(useCnt);
+            unsafe {
+                transmute::<&mut DeviceSlice<F>, &mut DeviceSlice<u64>>(d_betas)
+                    .async_copy_from(transmute::<&Vec<F>, &Vec<u64>>(&betas), &ctx.inner.stream)
+                    .unwrap();
+            }
+            let betas_device = DataSlice {
+                ptr: d_betas.as_ptr() as *const c_void,
+                len: betas.len() as i32,
+            };
 
-                        &alphas_device,
-                        &betas_device,
-                        &gammas_device,
+            let (d_gammas, remained) = remained.split_at_mut(useCnt);
+            unsafe {
+                transmute::<&mut DeviceSlice<F>, &mut DeviceSlice<u64>>(d_gammas)
+                    .async_copy_from(transmute::<&Vec<F>, &Vec<u64>>(&gammas), &ctx.inner.stream)
+                    .unwrap();
+            }
+            let gammas_device = DataSlice {
+                ptr: d_gammas.as_ptr() as *const c_void,
+                len: gammas.len() as i32,
+            };
 
-                        common_data.num_gate_constraints as i32,
-                        common_data.num_partial_products as i32,
+            ctx.inner.stream.synchronize().unwrap();
 
-                        ctx_ptr as *mut core::ffi::c_void,
-                    )
-                }
-            );
+            (
+                partial_products_and_zs_commitment_leaves_device,
+                alphas_device,
+                betas_device,
+                gammas_device,
+                d_outs,
+                d_quotient_polys,
+            )
         });
+
+        let points_device = DataSlice {
+            ptr: ctx.points_device.as_ptr() as *const c_void,
+            len: ctx.points_device.len() as i32,
+        };
+        let z_h_on_coset_evals_device = DataSlice {
+            ptr: ctx.z_h_on_coset_evals_device.as_ptr() as *const c_void,
+            len: ctx.z_h_on_coset_evals_device.len() as i32,
+        };
+        let z_h_on_coset_inverses_device = DataSlice {
+            ptr: ctx.z_h_on_coset_inverses_device.as_ptr() as *const c_void,
+            len: ctx.z_h_on_coset_inverses_device.len() as i32,
+        };
+        let k_is_device = DataSlice {
+            ptr: ctx.k_is_device.as_ptr() as *const c_void,
+            len: ctx.k_is_device.len() as i32,
+        };
+
+        let constants_sigmas_commitment_leaves_device = DataSlice {
+            ptr: ctx.constants_sigmas_commitment_leaves_device.as_ptr() as *const c_void,
+            len: ctx.constants_sigmas_commitment_leaves_device.len() as i32,
+        };
+        let ctx_ptr: *mut CudaInnerContext = &mut ctx.inner;
+        timed!(timing, "compute quotient polys with GPU", unsafe {
+            plonky2_cuda::compute_quotient_polys(
+                public_inputs_hash[0].to_canonical_u64(),
+                public_inputs_hash[1].to_canonical_u64(),
+                public_inputs_hash[2].to_canonical_u64(),
+                public_inputs_hash[3].to_canonical_u64(),
+                ext_values_device.as_ptr() as *const u64,
+                num_wires as i32,
+                degree as i32,
+                log_degree as i32,
+                root_table_device2.as_ptr() as *const u64,
+                shift_inv_powers_device.as_ptr() as *const u64,
+                rate_bits as i32,
+                salt_size as i32,
+                &partial_products_and_zs_commitment_leaves_device,
+                &constants_sigmas_commitment_leaves_device,
+                d_outs.as_mut_ptr() as *mut c_void,
+                d_quotient_polys.as_mut_ptr() as *mut c_void,
+                &points_device,
+                &z_h_on_coset_evals_device,
+                &z_h_on_coset_inverses_device,
+                &k_is_device,
+                &alphas_device,
+                &betas_device,
+                &gammas_device,
+                common_data.num_gate_constraints as i32,
+                common_data.num_partial_products as i32,
+                ctx_ptr as *mut core::ffi::c_void,
+            )
+        });
+    });
 
     assert!(quotient_degree == (degree << config.fri_config.rate_bits));
 
@@ -661,14 +694,14 @@ where
         "commit to quotient polys",
         PolynomialBatch::from_coeffs_with_gpu(
             degree,
-            num_challenges*(1 << config.fri_config.rate_bits),
+            num_challenges * (1 << config.fri_config.rate_bits),
             config.fri_config.rate_bits,
             config.zero_knowledge && PlonkOracle::QUOTIENT.blinding,
             config.fri_config.cap_height,
             timing,
             ctx,
             3,
-            zs_partial_products_lookups.len()<<config.fri_config.rate_bits
+            zs_partial_products_lookups.len() << config.fri_config.rate_bits
         )
     );
 
@@ -732,7 +765,6 @@ where
         public_inputs,
     })
 }
-
 
 /// Compute the partial products used in the `Z` polynomials.
 fn all_wires_permutation_partial_products<

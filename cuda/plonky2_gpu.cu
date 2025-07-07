@@ -538,6 +538,10 @@ extern "C" {
 
 
     RustError compute_quotient_polys(
+            uint64_t public_inputs_hash_1,
+            uint64_t public_inputs_hash_2,
+            uint64_t public_inputs_hash_3,
+            uint64_t public_inputs_hash_4,
             GoldilocksField* d_ext_values_flatten,
             int poly_num, int values_num_per_poly, int log_len,
             const GoldilocksField* d_root_table2, const GoldilocksField* d_shift_inv_powers,
@@ -570,38 +574,12 @@ extern "C" {
         int nthreads = 32;
         clock_t start;
 
-//        uint8_t *start_p = (uint8_t*)d_ext_values_flatten;
-//        uint8_t *end_p   = (uint8_t*)(d_ext_values_flatten+values_num_per_extpoly*ext_poly_num);
+        constexpr CommonData common_data = circuit_common_data();
+        int num_challenges = common_data.num_challenges;
+        int num_routed_wires = common_data.num_routed_wires;
+        int quotient_degree_factor = common_data.quotient_degree_factor;
+        int num_constants = common_data.num_constants;
 
-
-//        auto k_is = read_fvec_to_dev("k_is.bin");
-//        auto alphas = read_fvec_to_dev("alphas.bin");
-//        auto betas = read_fvec_to_dev("betas.bin");
-//        auto gammas = read_fvec_to_dev("gammas.bin");
-//        auto points = read_fvec_to_dev("points.bin");
-//        auto z_h_on_coset_evals = read_fvec_to_dev("z_h_on_coset.evals.bin");
-//        auto z_h_on_coset_inverses = read_fvec_to_dev("z_h_on_coset.inverses.bin");
-
-//        GoldilocksField *d_outs, *d_quotient_polys;
-//
-//        d_outs = (GoldilocksField*)start_p;
-//        start_p += values_num_per_extpoly*2*sizeof(GoldilocksField);
-//
-//        d_quotient_polys = (GoldilocksField*)start_p;
-//        start_p += values_num_per_extpoly*2*sizeof(GoldilocksField);
-//
-//        assert(start_p < end_p);
-
-//        cudaStreamSynchronize(stream);
-//        size_t total_dev_use = start_p-(uint8_t*)d_ext_values_flatten;
-//        printf("total_dev_use: %fG\n", (double )total_dev_use/1024/1024/1024);
-
-        int num_challenges = 2;
-        int num_constants = 8;
-        int num_routed_wires = 80;
-        int quotient_degree_factor = 8;
-
-//    printf("%d, %d\n", constants_sigmas_commitment_leaves->len, values_num_per_extpoly);
         assert(points->len == values_num_per_extpoly);
         assert(alphas->len == num_challenges);
         assert(betas->len == num_challenges);
@@ -611,8 +589,8 @@ extern "C" {
         thcnt = 300000;
         nthreads = 32;
         PoseidonHasher::HashOut public_inputs_hash = {
-                GoldilocksField{0x672c5e6c12ad3476}, GoldilocksField{0xca5c2e49acfad27e},
-                GoldilocksField{0x296be18388d15f70}, GoldilocksField{0x66b42e146a70d96d}
+                GoldilocksField{public_inputs_hash_1}, GoldilocksField{public_inputs_hash_2},
+                GoldilocksField{public_inputs_hash_3}, GoldilocksField{public_inputs_hash_4}
         };
         compute_quotient_values_kernel<<<(thcnt+nthreads-1)/nthreads, nthreads, 0, stream>>>(
                 log_len, rate_bits,

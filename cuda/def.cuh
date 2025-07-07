@@ -101,7 +101,7 @@ struct  GoldilocksField{
     }
         __device__ inline
     static const GoldilocksField coset_shift() {
-        return GoldilocksField{7};
+        return GoldilocksField{14293326489335486720};
     }
 
     __device__ inline GoldilocksField square() const {
@@ -956,6 +956,7 @@ static constexpr usize ceil_div_usize(usize a, usize b) {
 }
 
 
+// CommonCircuitData.selectors_info
 struct SelectorsInfo {
     int *selector_indices;
     Range<int>* groups;
@@ -974,12 +975,12 @@ struct CommonData {
 __device__ constexpr
 CommonData circuit_common_data() {
     return CommonData{
-        .num_constants = 8,
-        .num_challenges = 2,
-        .num_routed_wires = 80,
-        .quotient_degree_factor = 8,
-        .num_gate_constraints = 123,
-        .num_gates = 5,
+        .num_constants = 4, // This is CommonCircuitData.num_constants not config.num_constants!
+        .num_challenges = 2, // From config
+        .num_routed_wires = 80, // From config
+        .quotient_degree_factor = 8, // From config
+        .num_gate_constraints = 123, // Maxiumum constraint number on any gate
+        .num_gates = 5, // Number of different gates in the circuit
     };
 }
 

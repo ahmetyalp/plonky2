@@ -376,6 +376,8 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         let values_flatten_len = num_polynomials * degree;
         let ext_values_flatten_len = (values_flatten_len + salt_size * degree) * (1 << rate_bits);
 
+        let pad_extvalues_len = ext_values_flatten_len;
+
         let (ext_values_flatten, values_flatten, digests_and_caps_buf);
 
         let ext_values_device_offset;
@@ -406,6 +408,11 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
             .split_at_mut(ext_values_device_offset)
             .1;
 
+
+        let root_table_device = &ctx.root_table_device;
+        let root_table_device2 = &ctx.root_table_device2;
+        let shift_powers_device = &ctx.shift_powers_device;
+
         timed!(timing, "copy values to gpu", unsafe {
             transmute::<&mut DeviceSlice<F>, &mut DeviceSlice<u64>>(
                 &mut values_device[0..values_flatten_len],
@@ -414,10 +421,6 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
             .unwrap();
             ctx.inner.stream.synchronize().unwrap();
         });
-
-        let root_table_device = &ctx.root_table_device;
-        let root_table_device2 = &ctx.root_table_device2;
-        let shift_powers_device = &ctx.shift_powers_device;
 
         unsafe {
             let ctx_ptr: *mut CudaInnerContext = &mut ctx.inner;
@@ -456,7 +459,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
                     rate_bits as i32,
                     salt_size as i32,
                     cap_height as i32,
-                    ext_values_flatten_len as i32,
+                    pad_extvalues_len as i32,
                     ctx_ptr as *mut core::ffi::c_void,
                 );
             });
@@ -465,7 +468,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         timed!(timing, "copy result back to cpu", {
             let mut alllen = ext_values_flatten_len;
             assert!(ext_values_flatten.len() == ext_values_flatten_len);
-            alllen += ext_values_flatten_len;
+            alllen += pad_extvalues_len;
 
             let len_with_F = num_digests_and_caps * 4;
             let fs = unsafe { mem::transmute::<&mut Vec<_>, &mut Vec<F>>(digests_and_caps_buf) };
@@ -523,7 +526,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
             Self {
                 polynomials,
                 merkle_tree,
-                degree_log: degree_log,
+                degree_log,
                 rate_bits,
                 blinding,
             }
@@ -556,16 +559,18 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
 
         let values_flatten_len = num_polynomials * degree;
         let ext_values_flatten_len = (values_flatten_len + salt_size * degree) * (1 << rate_bits);
+        let digests_and_caps_buf_len = num_digests_and_caps;
 
-        let (values_flatten, ext_values_flatten, digests_and_caps_buf);
+        let pad_extvalues_len = ext_values_flatten_len;
 
-        ext_values_flatten = Arc::<Vec<F>>::get_mut(&mut ctx.ext_values_flatten3).unwrap();
-        values_flatten = Arc::<Vec<F, CUDAAllocator>>::get_mut(&mut ctx.values_flatten3).unwrap();
-        digests_and_caps_buf =
+        let values_flatten = Arc::<Vec<F, MyAllocator>>::get_mut(&mut ctx.values_flatten3).unwrap();
+        let ext_values_flatten = Arc::<Vec<F>>::get_mut(&mut ctx.ext_values_flatten3).unwrap();
+        let digests_and_caps_buf =
             Arc::<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>::get_mut(
                 &mut ctx.digests_and_caps_buf3,
             )
             .unwrap();
+
         let ext_values_device_offset = ctx.second_stage_offset + offset;
 
         let values_device = ctx
@@ -603,7 +608,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
                     rate_bits as i32,
                     salt_size as i32,
                     cap_height as i32,
-                    ext_values_flatten_len as i32,
+                    pad_extvalues_len as i32,
                     ctx_ptr as *mut core::ffi::c_void,
                 );
             });
@@ -611,9 +616,9 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         timed!(timing, "copy result back to cpu", {
             let mut alllen = ext_values_flatten_len;
             assert!(ext_values_flatten.len() == ext_values_flatten_len);
-            alllen += ext_values_flatten_len;
+            alllen += pad_extvalues_len;
 
-            let len_with_F = num_digests_and_caps * 4;
+            let len_with_F = digests_and_caps_buf_len * 4;
             let fs = unsafe { mem::transmute::<&mut Vec<_>, &mut Vec<F>>(digests_and_caps_buf) };
             unsafe {
                 fs.set_len(len_with_F);
