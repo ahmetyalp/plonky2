@@ -419,6 +419,7 @@ where
     let num_challenges = config.num_challenges;
     let quotient_degree = common_data.quotient_degree();
     let degree = common_data.degree();
+    let log_degree = log2_strict(degree);
 
     set_lookup_wires(prover_data, common_data, &mut partition_witness)?;
 
