@@ -150,7 +150,7 @@ where
         common_data,
         partition_witness,
         #[cfg(feature = "cuda")]
-        ctx,
+        ctx.expect("CUDA context is required for CUDA prover"),
         timing,
     )
 }
