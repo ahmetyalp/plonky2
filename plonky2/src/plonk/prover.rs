@@ -133,7 +133,7 @@ pub fn prove<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: 
     common_data: &CommonCircuitData<F, D>,
     inputs: PartialWitness<F>,
     timing: &mut TimingTree,
-    #[cfg(feature = "cuda")] ctx: &mut crate::fri::oracle::CudaInvContext<F, C, D>,
+    #[cfg(feature = "cuda")] ctx: Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
 ) -> Result<ProofWithPublicInputs<F, C, D>>
 where
     C::Hasher: Hasher<F>,
@@ -519,7 +519,10 @@ where
         .flat_map(|p| p.values.to_vec())
         .collect::<Vec<_>>();
 
-    println!("second stage num_wires: {}", zs_partial_products_lookups.len() / degree);
+    println!(
+        "second stage num_wires: {}",
+        zs_partial_products_lookups.len() / degree
+    );
 
     let partial_products_zs_and_lookup_commitment = timed!(
         timing,
@@ -657,10 +660,10 @@ where
         let ctx_ptr: *mut CudaInnerContext = &mut ctx.inner;
         timed!(timing, "compute quotient polys with GPU", unsafe {
             plonky2_cuda::compute_quotient_polys(
-                public_inputs_hash[0].to_canonical_u64(),
-                public_inputs_hash[1].to_canonical_u64(),
-                public_inputs_hash[2].to_canonical_u64(),
-                public_inputs_hash[3].to_canonical_u64(),
+                public_inputs_hash.elements[0].to_canonical_u64(),
+                public_inputs_hash.elements[1].to_canonical_u64(),
+                public_inputs_hash.elements[2].to_canonical_u64(),
+                public_inputs_hash.elements[3].to_canonical_u64(),
                 ext_values_device.as_ptr() as *const u64,
                 num_wires as i32,
                 degree as i32,

@@ -563,7 +563,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
 
         let pad_extvalues_len = ext_values_flatten_len;
 
-        let values_flatten = Arc::<Vec<F, MyAllocator>>::get_mut(&mut ctx.values_flatten3).unwrap();
+        let values_flatten = Arc::<Vec<F, CUDAAllocator>>::get_mut(&mut ctx.values_flatten3).unwrap();
         let ext_values_flatten = Arc::<Vec<F>>::get_mut(&mut ctx.ext_values_flatten3).unwrap();
         let digests_and_caps_buf =
             Arc::<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>::get_mut(
