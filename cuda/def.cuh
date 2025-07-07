@@ -972,7 +972,7 @@ struct CommonData {
     int num_gates;
 };
 
-__device__ constexpr
+__host__ __device__ constexpr
 CommonData circuit_common_data() {
     return CommonData{
         .num_constants = 4, // This is CommonCircuitData.num_constants not config.num_constants!
