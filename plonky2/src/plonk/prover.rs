@@ -2,7 +2,6 @@
 
 #[cfg(not(feature = "std"))]
 use alloc::{format, vec, vec::Vec};
-use plonky2_util::log2_strict;
 use core::cmp::min;
 use core::mem::swap;
 #[cfg(feature = "cuda")]
