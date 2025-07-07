@@ -115,6 +115,10 @@ extern "C" {
 
 
     pub fn compute_quotient_polys(
+        public_inputs_hash_1: u64,
+        public_inputs_hash_2: u64,
+        public_inputs_hash_3: u64,
+        public_inputs_hash_4: u64,
         ext_values_flatten: *const u64,
         poly_num: i32,
         values_num_per_poly: i32,
