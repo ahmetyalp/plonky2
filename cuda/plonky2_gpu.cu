@@ -536,8 +536,8 @@ extern "C" {
         printf("transpose_kernel elapsed: %.2lf\n", (double )(clock()-start) / CLOCKS_PER_SEC * 1000);
 
         start = clock();
-        GoldilocksField n_inv = {.data = 18446708885042503681LL};
-        // GoldilocksField n_inv = *p_inv;
+        // GoldilocksField n_inv = {.data = 18446708885042503681LL};
+        GoldilocksField n_inv = *p_inv;
         ifft_kernel<<<num_challenges, 32*8, 0, stream>>>(d_quotient_polys, num_challenges, values_num_per_extpoly, log_len+rate_bits, d_root_table2, n_inv);
         cudaStreamSynchronize(stream);
         printf("ifft_kernel elapsed: %.2lf\n", (double )(clock()-start) / CLOCKS_PER_SEC * 1000);

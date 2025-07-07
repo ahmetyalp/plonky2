@@ -2,6 +2,7 @@
 
 #[cfg(not(feature = "std"))]
 use alloc::{format, vec, vec::Vec};
+use plonky2_util::log2_strict;
 use core::cmp::min;
 use core::mem::swap;
 #[cfg(feature = "cuda")]
@@ -548,8 +549,13 @@ where
 
     timed!(timing, "compute quotient polys", {
         let num_wires = common_data.config.num_wires;
-        let log_degree = log2_strict(degree);
-        let n_inv = F::inverse_2exp(log_degree);
+        let quotient_degree_bits = log2_ceil(common_data.quotient_degree_factor);
+        assert!(
+            quotient_degree_bits <= common_data.config.fri_config.rate_bits,
+            "Having constraints of degree higher than the rate is not supported yet. \
+            If we need this in the future, we can precompute the larger LDE before computing the `PolynomialBatch`s."
+        );
+        let n_inv = F::inverse_2exp(common_data.degree_bits() + quotient_degree_bits);
         let n_inv_ptr: *const F = &n_inv;
         let values_flatten_len = num_wires * degree;
 
