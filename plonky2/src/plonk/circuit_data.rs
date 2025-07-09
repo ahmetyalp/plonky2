@@ -186,12 +186,34 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         buffer.read_circuit_data(gate_serializer, generator_serializer)
     }
 
-    pub fn prove(&self, inputs: PartialWitness<F>) -> Result<ProofWithPublicInputs<F, C, D>> {
+    pub fn prove
+    (
+        &self,
+        inputs: PartialWitness<F>,
+    ) -> Result<ProofWithPublicInputs<F, C, D>> {
         prove::<F, C, D>(
             &self.prover_only,
             &self.common,
             inputs,
             &mut TimingTree::default(),
+            #[cfg(feature = "cuda")]
+            None,
+        )
+    }
+
+    #[cfg(feature = "cuda")]
+    pub fn prove_cuda
+    (
+        &self,
+        inputs: PartialWitness<F>,
+        ctx: Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
+    ) -> Result<ProofWithPublicInputs<F, C, D>> {
+        prove::<F, C, D>(
+            &self.prover_only,
+            &self.common,
+            inputs,
+            &mut TimingTree::default(),
+            ctx,
         )
     }
 
@@ -290,6 +312,19 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
             &self.common,
             inputs,
             &mut TimingTree::default(),
+            #[cfg(feature = "cuda")]
+            None,
+        )
+    }
+
+    #[cfg(feature = "cuda")]
+    pub fn prove_cuda(&self, inputs: PartialWitness<F>, ctx: Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>) -> Result<ProofWithPublicInputs<F, C, D>> {
+        prove::<F, C, D>(
+            &self.prover_only,
+            &self.common,
+            inputs,
+            &mut TimingTree::default(),
+            ctx,
         )
     }
 }
@@ -358,6 +393,7 @@ pub struct ProverOnlyCircuitData<
     pub representative_map: Vec<usize>,
     /// Pre-computed roots for faster FFT.
     pub fft_root_table: Option<FftRootTable<F>>,
+    pub fft_root_table_deg: Vec<F>, // flatten
     /// A digest of the "circuit" (i.e. the instance, minus public inputs), which can be used to
     /// seed Fiat-Shamir.
     pub circuit_digest: <<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash,
@@ -661,6 +697,10 @@ impl<F: RichField + Extendable<D>, const D: usize> CommonCircuitData<F, D> {
             self.fri_lookup_polys(),
         ]
         .concat()
+    }
+
+    pub fn num_gates(&self) -> usize {
+        self.gates.len()
     }
 }
 

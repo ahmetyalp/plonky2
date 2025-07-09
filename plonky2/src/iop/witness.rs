@@ -1,5 +1,6 @@
 #[cfg(not(feature = "std"))]
 use alloc::{vec, vec::Vec};
+use plonky2_maybe_rayon::{IndexedParallelIterator, MaybeParChunksMut, ParallelIterator};
 use core::iter::zip;
 
 use anyhow::{anyhow, Result};
@@ -282,11 +283,17 @@ pub trait Witness<F: Field>: WitnessWrite<F> {
 #[derive(Clone, Debug)]
 pub struct MatrixWitness<F: Field> {
     pub(crate) wire_values: Vec<Vec<F>>,
+    pub(crate) flatten_wire_values: Vec<F>,
+    pub(crate) degree: usize,
 }
 
 impl<F: Field> MatrixWitness<F> {
     pub fn get_wire(&self, gate: usize, input: usize) -> F {
-        self.wire_values[input][gate]
+        if self.flatten_wire_values.is_empty() {
+            self.wire_values[input][gate]
+        } else {
+            self.flatten_wire_values[input*self.degree + gate]
+        }
     }
 }
 
@@ -373,6 +380,7 @@ impl<'a, F: Field> PartitionWitness<'a, F> {
         target.index(self.num_wires, self.degree)
     }
 
+    /// WARN: doesn't return flattened witness.
     pub fn full_witness(self) -> MatrixWitness<F> {
         let mut wire_values = vec![vec![F::ZERO; self.degree]; self.num_wires];
         for i in 0..self.degree {
@@ -384,7 +392,22 @@ impl<'a, F: Field> PartitionWitness<'a, F> {
             }
         }
 
-        MatrixWitness { wire_values }
+        MatrixWitness { wire_values, flatten_wire_values: vec![], degree: self.degree }
+    }
+
+    /// WARN: only returns flattened witness.
+    pub fn full_flatten_witness(self) -> MatrixWitness<F> {
+        let mut wire_values = vec![F::ZERO; self.degree * self.num_wires];
+        wire_values.par_chunks_mut(self.degree).enumerate().for_each(|(j, values)| {
+            for i in 0..self.degree {
+                let t = Target::Wire(Wire { row: i, column: j });
+                if let Some(x) = self.try_get_target(t) {
+                    values[i] = x;
+                }
+            }
+        });
+
+        MatrixWitness { wire_values: vec![], flatten_wire_values: wire_values, degree: self.degree }
     }
 }
 

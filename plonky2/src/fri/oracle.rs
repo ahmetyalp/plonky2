@@ -1,5 +1,29 @@
 #[cfg(not(feature = "std"))]
 use alloc::{format, vec::Vec};
+#[cfg(not(feature = "cuda"))]
+use std::alloc;
+#[cfg(feature = "cuda")]
+use std::alloc::{AllocError, Allocator, Layout};
+#[cfg(feature = "cuda")]
+use std::ffi::c_void;
+#[cfg(feature = "cuda")]
+use plonky2_cuda;
+#[cfg(feature = "cuda")]
+use rustacuda::prelude::*;
+#[cfg(feature = "cuda")]
+use rustacuda::memory::{AsyncCopyDestination, DeviceBuffer, DeviceSlice, cuda_malloc_locked, cuda_free_locked};
+#[cfg(feature = "cuda")]
+use std::mem::transmute;
+#[cfg(feature = "cuda")]
+use std::mem;
+#[cfg(feature = "cuda")]
+use std::sync::Arc;
+#[cfg(feature = "cuda")]
+use std::ptr::NonNull;
+#[cfg(feature = "cuda")]
+use crate::plonk::config::Hasher;
+#[cfg(feature = "cuda")]
+use crate::hash::merkle_tree::MerkleCap;
 
 use itertools::Itertools;
 use plonky2_field::types::Field;
@@ -21,6 +45,89 @@ use crate::timed;
 use crate::util::reducing::ReducingFactor;
 use crate::util::timing::TimingTree;
 use crate::util::{log2_strict, reverse_bits, reverse_index_bits_in_place, transpose};
+
+#[cfg(feature = "cuda")]
+#[derive(Debug)]
+pub struct CUDAAllocator {}
+
+#[cfg(feature = "cuda")]
+unsafe impl Allocator for CUDAAllocator {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        unsafe {
+            let raw_ptr = cuda_malloc_locked::<u8>(layout.size()).unwrap();
+            let ptr = NonNull::new(raw_ptr).ok_or(AllocError)?;
+            Ok(NonNull::slice_from_raw_parts(ptr, layout.size()))
+        }
+    }
+
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        if layout.size() != 0 {
+            // SAFETY: `layout` is non-zero in size,
+            // other conditions must be upheld by the caller
+            unsafe {
+                // dealloc(ptr.as_ptr(), layout)
+                cuda_free_locked(ptr.as_ptr()).unwrap();
+            }
+        }
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[derive(Debug)]
+pub struct CudaInnerContext {
+    pub stream: rustacuda::stream::Stream,
+    pub stream2: rustacuda::stream::Stream,
+
+}
+
+#[cfg(feature = "cuda")]
+#[repr(C)]
+#[derive(Debug)]
+pub struct CudaInvContext<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
+{
+    pub inner: CudaInnerContext,
+    pub ext_values_flatten :Arc<Vec<F>>,
+    pub values_flatten     :Arc<Vec<F, CUDAAllocator>>,
+    pub digests_and_caps_buf :Arc<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>,
+
+    pub ext_values_flatten2 :Arc<Vec<F>>,
+    pub values_flatten2     :Arc<Vec<F, CUDAAllocator>>,
+    pub digests_and_caps_buf2 :Arc<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>,
+
+    pub ext_values_flatten3 :Arc<Vec<F>>,
+    pub values_flatten3     :Arc<Vec<F, CUDAAllocator>>,
+    pub digests_and_caps_buf3 :Arc<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>,
+
+    // pub values_device: DeviceBuffer::<F>,
+    // pub ext_values_device: DeviceBuffer::<F>,
+    pub cache_mem_device: DeviceBuffer::<F>,
+    pub second_stage_offset: usize,
+
+    pub root_table_device: DeviceBuffer::<F>,
+    pub root_table_device2: DeviceBuffer::<F>,
+    pub constants_sigmas_commitment_leaves_device: DeviceBuffer::<F>,
+    pub shift_powers_device: DeviceBuffer::<F>,
+    pub shift_inv_powers_device: DeviceBuffer::<F>,
+
+    pub points_device: DeviceBuffer::<F>,
+    pub z_h_on_coset_evals_device: DeviceBuffer::<F>,
+    pub z_h_on_coset_inverses_device: DeviceBuffer::<F>,
+    pub k_is_device: DeviceBuffer::<F>,
+
+    pub ctx: Context,
+}
+
+#[cfg(not(feature = "cuda"))]
+#[repr(C)]
+#[derive(Debug)]
+pub struct CudaInvContext<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
+    pub _p : std::marker::PhantomData<F>,
+    pub _c : std::marker::PhantomData<C>,
+}
+
+#[cfg(not(feature = "cuda"))]
+/// Alias Global allocator to CUDAAllocator
+pub type CUDAAllocator = alloc::Global;
 
 /// Four (~64 bit) field elements gives ~128 bit security.
 pub const SALT_SIZE: usize = 4;
@@ -180,6 +287,8 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         fri_params: &FriParams,
         final_poly_coeff_len: Option<usize>,
         max_num_query_steps: Option<usize>,
+        #[cfg(feature = "cuda")]
+        ctx: &mut Option<&mut crate::fri::oracle::CudaInvContext<F, C, D>>,
         timing: &mut TimingTree,
     ) -> FriProof<F, C::Hasher, D> {
         assert!(D > 1, "Not implemented for D=1.");
@@ -230,9 +339,339 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
             fri_params,
             final_poly_coeff_len,
             max_num_query_steps,
+            #[cfg(feature = "cuda")]
+            ctx,
             timing,
         );
 
         fri_proof
+    }
+
+    #[cfg(feature = "cuda")]
+    pub fn from_values_with_gpu(
+        values: &Vec<F>,
+        num_polynomials: usize,
+        degree: usize,
+        rate_bits: usize,
+        blinding: bool,
+        cap_height: usize,
+        timing: &mut TimingTree,
+        fft_root_table: Option<&FftRootTable<F>>,
+        fft_root_table_deg: &Vec<F>,
+        ctx: &mut CudaInvContext<F, C, D>,
+        stage: usize,
+    ) -> Self {
+        assert!(stage == 1 || stage == 2, "stage must be 1 or 2");
+
+        let salt_size = if blinding { SALT_SIZE } else { 0 };
+
+        let degree_log = log2_strict(degree);
+        let n_inv = F::inverse_2exp(degree_log);
+        let n_inv_ptr: *const F = &n_inv;
+
+        let len_cap = (1 << cap_height);
+        let num_digests = 2 * (degree * (1 << rate_bits) - len_cap);
+        let num_digests_and_caps = num_digests + len_cap;
+
+        let values_flatten_len = num_polynomials * degree;
+        let ext_values_flatten_len = (values_flatten_len + salt_size * degree) * (1 << rate_bits);
+
+        let pad_extvalues_len = ext_values_flatten_len;
+
+        let (ext_values_flatten, values_flatten, digests_and_caps_buf);
+
+        let ext_values_device_offset;
+        if stage == 1 {
+            ext_values_flatten = Arc::<Vec<F>>::get_mut(&mut ctx.ext_values_flatten).unwrap();
+            values_flatten =
+                Arc::<Vec<F, CUDAAllocator>>::get_mut(&mut ctx.values_flatten).unwrap();
+            digests_and_caps_buf =
+                Arc::<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>::get_mut(
+                    &mut ctx.digests_and_caps_buf,
+                )
+                .unwrap();
+            ext_values_device_offset = 0;
+        } else {
+            ext_values_flatten = Arc::<Vec<F>>::get_mut(&mut ctx.ext_values_flatten2).unwrap();
+            values_flatten =
+                Arc::<Vec<F, CUDAAllocator>>::get_mut(&mut ctx.values_flatten2).unwrap();
+            digests_and_caps_buf =
+                Arc::<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>::get_mut(
+                    &mut ctx.digests_and_caps_buf2,
+                )
+                .unwrap();
+            ext_values_device_offset = ctx.second_stage_offset;
+        }
+
+        let values_device = ctx
+            .cache_mem_device
+            .split_at_mut(ext_values_device_offset)
+            .1;
+
+
+        let root_table_device = &ctx.root_table_device;
+        let root_table_device2 = &ctx.root_table_device2;
+        let shift_powers_device = &ctx.shift_powers_device;
+
+        timed!(timing, "copy values to gpu", unsafe {
+            transmute::<&mut DeviceSlice<F>, &mut DeviceSlice<u64>>(
+                &mut values_device[0..values_flatten_len],
+            )
+            .async_copy_from(transmute::<&Vec<F>, &Vec<u64>>(values), &ctx.inner.stream)
+            .unwrap();
+            ctx.inner.stream.synchronize().unwrap();
+        });
+
+        unsafe {
+            let ctx_ptr: *mut CudaInnerContext = &mut ctx.inner;
+            timed!(timing, "IFTT", {
+                plonky2_cuda::ifft(
+                    values_device.as_mut_ptr() as *mut u64,
+                    num_polynomials as i32,
+                    degree as i32,
+                    degree_log as i32,
+                    root_table_device.as_ptr() as *const u64,
+                    n_inv_ptr as *const u64,
+                    ctx_ptr as *mut core::ffi::c_void,
+                );
+            });
+            timed!(timing, "FFT + build Merkle tree + transpose with gpu", {
+                unsafe {
+                    transmute::<&DeviceSlice<F>, &DeviceSlice<u64>>(
+                        &values_device[0..values_flatten_len],
+                    )
+                    .async_copy_to(
+                        transmute::<&mut Vec<F, CUDAAllocator>, &mut Vec<u64>>(values_flatten),
+                        &ctx.inner.stream2,
+                    )
+                    .unwrap();
+                }
+
+                plonky2_cuda::merkle_tree_from_coeffs(
+                    values_device.as_mut_ptr() as *mut u64,
+                    values_device.as_mut_ptr() as *mut u64,
+                    num_polynomials as i32,
+                    degree as i32,
+                    degree_log as i32,
+                    root_table_device.as_ptr() as *const u64,
+                    root_table_device2.as_ptr() as *const u64,
+                    shift_powers_device.as_ptr() as *const u64,
+                    rate_bits as i32,
+                    salt_size as i32,
+                    cap_height as i32,
+                    pad_extvalues_len as i32,
+                    ctx_ptr as *mut core::ffi::c_void,
+                );
+            });
+        }
+
+        timed!(timing, "copy result back to cpu", {
+            let mut alllen = ext_values_flatten_len;
+            assert!(ext_values_flatten.len() == ext_values_flatten_len);
+            alllen += pad_extvalues_len;
+
+            let len_with_F = num_digests_and_caps * 4;
+            let fs = unsafe { mem::transmute::<&mut Vec<_>, &mut Vec<F>>(digests_and_caps_buf) };
+            unsafe {
+                fs.set_len(len_with_F);
+            }
+            unsafe {
+                transmute::<&DeviceSlice<F>, &DeviceSlice<u64>>(
+                    &values_device[alllen..alllen + len_with_F],
+                )
+                .async_copy_to(
+                    transmute::<&mut Vec<F>, &mut Vec<u64>>(fs),
+                    &ctx.inner.stream,
+                )
+                .unwrap();
+                ctx.inner.stream.synchronize().unwrap();
+            }
+            unsafe {
+                fs.set_len(len_with_F / 4);
+            }
+        });
+
+        let coeffs = values_flatten
+            .par_chunks(degree)
+            .map(|chunk| PolynomialCoeffs {
+                coeffs: chunk.to_vec(),
+            })
+            .collect::<Vec<_>>();
+
+        {
+            let polynomials = coeffs;
+            let (ctx_ext_values_flatten, ctx_digests_and_caps_buf);
+            if stage == 1 {
+                ctx_ext_values_flatten = ctx.ext_values_flatten.clone();
+                ctx_digests_and_caps_buf = ctx.digests_and_caps_buf.clone();
+            } else {
+                ctx_ext_values_flatten = ctx.ext_values_flatten2.clone();
+                ctx_digests_and_caps_buf = ctx.digests_and_caps_buf2.clone();
+            }
+
+            let ctx_ext_values_flatten_len = ctx_ext_values_flatten.len();
+            let merkle_tree = MerkleTree {
+                leaves: vec![],
+                digests: vec![],
+                cap: MerkleCap(
+                    ctx_digests_and_caps_buf[num_digests..num_digests_and_caps].to_vec(),
+                ),
+                leaf_len: num_polynomials + salt_size,
+                flatten_leaves: ctx_ext_values_flatten,
+                leaves_len: ctx_ext_values_flatten_len,
+                device_offset: ext_values_device_offset as isize,
+                digests_and_cap: ctx_digests_and_caps_buf,
+            };
+
+            Self {
+                polynomials,
+                merkle_tree,
+                degree_log,
+                rate_bits,
+                blinding,
+            }
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    pub fn from_coeffs_with_gpu(
+        degree: usize,
+        num_polynomials: usize,
+        rate_bits: usize,
+        blinding: bool,
+        cap_height: usize,
+        timing: &mut TimingTree,
+        ctx: &mut CudaInvContext<F, C, D>,
+        stage: usize,
+        offset: usize,
+    ) -> Self {
+        assert!(stage == 3, "stage must be 3");
+
+        let salt_size = if blinding { SALT_SIZE } else { 0 };
+
+        let degree_log = log2_strict(degree);
+        let n_inv = F::inverse_2exp(degree_log);
+        let n_inv_ptr: *const F = &n_inv;
+
+        let len_cap = (1 << cap_height);
+        let num_digests = 2 * (degree * (1 << rate_bits) - len_cap);
+        let num_digests_and_caps = num_digests + len_cap;
+
+        let values_flatten_len = num_polynomials * degree;
+        let ext_values_flatten_len = (values_flatten_len + salt_size * degree) * (1 << rate_bits);
+        let digests_and_caps_buf_len = num_digests_and_caps;
+
+        let pad_extvalues_len = ext_values_flatten_len;
+
+        let values_flatten = Arc::<Vec<F, CUDAAllocator>>::get_mut(&mut ctx.values_flatten3).unwrap();
+        let ext_values_flatten = Arc::<Vec<F>>::get_mut(&mut ctx.ext_values_flatten3).unwrap();
+        let digests_and_caps_buf =
+            Arc::<Vec<<<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash>>::get_mut(
+                &mut ctx.digests_and_caps_buf3,
+            )
+            .unwrap();
+
+        let ext_values_device_offset = ctx.second_stage_offset + offset;
+
+        let values_device = ctx
+            .cache_mem_device
+            .split_at_mut(ext_values_device_offset)
+            .1;
+
+        let root_table_device = &ctx.root_table_device;
+        let root_table_device2 = &ctx.root_table_device2;
+        let shift_powers_device = &ctx.shift_powers_device;
+
+        unsafe {
+            let ctx_ptr: *mut CudaInnerContext = &mut ctx.inner;
+            timed!(timing, "FFT + build Merkle tree + transpose with gpu", {
+                unsafe {
+                    transmute::<&DeviceSlice<F>, &DeviceSlice<u64>>(
+                        &values_device[0..values_flatten_len],
+                    )
+                    .async_copy_to(
+                        transmute::<&mut Vec<F, CUDAAllocator>, &mut Vec<u64>>(values_flatten),
+                        &ctx.inner.stream2,
+                    )
+                    .unwrap();
+                }
+
+                plonky2_cuda::merkle_tree_from_coeffs(
+                    values_device.as_mut_ptr() as *mut u64,
+                    values_device.as_mut_ptr() as *mut u64,
+                    num_polynomials as i32,
+                    degree as i32,
+                    degree_log as i32,
+                    root_table_device.as_ptr() as *const u64,
+                    root_table_device2.as_ptr() as *const u64,
+                    shift_powers_device.as_ptr() as *const u64,
+                    rate_bits as i32,
+                    salt_size as i32,
+                    cap_height as i32,
+                    pad_extvalues_len as i32,
+                    ctx_ptr as *mut core::ffi::c_void,
+                );
+            });
+        }
+        timed!(timing, "copy result back to cpu", {
+            let mut alllen = ext_values_flatten_len;
+            assert!(ext_values_flatten.len() == ext_values_flatten_len);
+            alllen += pad_extvalues_len;
+
+            let len_with_F = digests_and_caps_buf_len * 4;
+            let fs = unsafe { mem::transmute::<&mut Vec<_>, &mut Vec<F>>(digests_and_caps_buf) };
+            unsafe {
+                fs.set_len(len_with_F);
+            }
+            unsafe {
+                transmute::<&DeviceSlice<F>, &DeviceSlice<u64>>(
+                    &values_device[alllen..alllen + len_with_F],
+                )
+                .async_copy_to(
+                    transmute::<&mut Vec<F>, &mut Vec<u64>>(fs),
+                    &ctx.inner.stream,
+                )
+                .unwrap();
+                ctx.inner.stream.synchronize().unwrap();
+            }
+            unsafe {
+                fs.set_len(len_with_F / 4);
+            }
+        });
+
+        let coeffs = values_flatten
+            .par_chunks(degree)
+            .map(|chunk| PolynomialCoeffs {
+                coeffs: chunk.to_vec(),
+            })
+            .collect::<Vec<_>>();
+
+        {
+            let polynomials = coeffs;
+            let ctx_ext_values_flatten = ctx.ext_values_flatten.clone();
+            let ctx_digests_and_caps_buf = ctx.digests_and_caps_buf3.clone();
+
+            let ctx_ext_values_flatten_len = ext_values_flatten_len;
+            let merkle_tree = MerkleTree {
+                leaves: vec![],
+                digests: vec![],
+                cap: MerkleCap(
+                    ctx_digests_and_caps_buf[num_digests..num_digests_and_caps].to_vec(),
+                ),
+                leaf_len: num_polynomials + salt_size,
+                flatten_leaves: ctx_ext_values_flatten,
+                leaves_len: ctx_ext_values_flatten_len,
+                device_offset: ext_values_device_offset as isize,
+                digests_and_cap: ctx_digests_and_caps_buf,
+            };
+
+            Self {
+                polynomials,
+                merkle_tree,
+                degree_log,
+                rate_bits,
+                blinding,
+            }
+        }
     }
 }
